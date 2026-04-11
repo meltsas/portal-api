@@ -7,6 +7,13 @@
 	"name": "portal-api",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-04-08",
+	"d1_databases": [
+		{
+			"binding": "portal_db",
+			"database_name": "portal-db",
+			"database_id": "d767fe9d-84f5-436f-a8dc-85370c179a3a"
+		}
+	],
 	"observability": {
 		"enabled": true
 	},
