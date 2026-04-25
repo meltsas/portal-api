@@ -1,4 +1,5 @@
-import type { AvailabilityStatus, AvailabilityPeriodInput, UpdateAvailabilityPayload } from '../../types/api';
+import type { RouteHandler } from '../../router/types';
+import type { AvailabilityStatus, UpdateAvailabilityPayload } from '../../types/api';
 import type { OfferAvailabilityRow } from '../../types/db';
 import { toAdminAvailabilityPeriod } from '../../mappers/availability';
 import { jsonResponse, notFound, badRequest, parseJsonBody } from '../../utils/response';
@@ -8,7 +9,9 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_NOTE_LENGTH = 500;
 const MAX_PERIODS = 50;
 
-export async function handleAdminGetAvailability(env: Env, offerId: string): Promise<Response> {
+export const handleAdminGetAvailability: RouteHandler = async ({ env, params }) => {
+	const offerId = params.offerId;
+
 	const offer = await env.portal_db
 		.prepare(`SELECT id FROM offers WHERE id = ?`)
 		.bind(offerId)
@@ -31,9 +34,11 @@ export async function handleAdminGetAvailability(env: Env, offerId: string): Pro
 	const data = result.results.map(toAdminAvailabilityPeriod);
 
 	return jsonResponse({ data });
-}
+};
 
-export async function handleAdminUpdateAvailability(env: Env, request: Request, offerId: string): Promise<Response> {
+export const handleAdminUpdateAvailability: RouteHandler = async ({ env, request, params }) => {
+	const offerId = params.offerId;
+
 	const body = await parseJsonBody<UpdateAvailabilityPayload>(request);
 	if (!body) {
 		return badRequest('Invalid or missing JSON body');
@@ -122,4 +127,4 @@ export async function handleAdminUpdateAvailability(env: Env, request: Request, 
 	await env.portal_db.batch(statements);
 
 	return jsonResponse({ success: true, count: body.periods.length });
-}
+};

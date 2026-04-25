@@ -1,3 +1,4 @@
+import type { RouteHandler } from '../../router/types';
 import type { LeadStatus, UpdateLeadPayload } from '../../types/api';
 import type { LeadWithOfferTitleRow } from '../../types/db';
 import { toAdminLeadListItem, toAdminLeadDetail } from '../../mappers/leads';
@@ -6,7 +7,7 @@ import { jsonResponse, notFound, badRequest, parseJsonBody } from '../../utils/r
 const VALID_STATUSES: LeadStatus[] = ['new', 'contacted', 'closed', 'spam', 'archived'];
 const MAX_ADMIN_NOTES_LENGTH = 5000;
 
-export async function handleAdminGetLeads(env: Env, url: URL): Promise<Response> {
+export const handleAdminGetLeads: RouteHandler = async ({ env, url }) => {
 	const statusFilter = url.searchParams.get('status');
 	const offerIdFilter = url.searchParams.get('offerId');
 
@@ -48,9 +49,11 @@ export async function handleAdminGetLeads(env: Env, url: URL): Promise<Response>
 	const data = result.results.map(toAdminLeadListItem);
 
 	return jsonResponse({ data });
-}
+};
 
-export async function handleAdminGetLead(env: Env, leadId: string): Promise<Response> {
+export const handleAdminGetLead: RouteHandler = async ({ env, params }) => {
+	const leadId = params.leadId;
+
 	const row = await env.portal_db
 		.prepare(
 			`SELECT l.id, l.offer_id, l.status, l.name, l.email, l.phone, l.message,
@@ -69,9 +72,11 @@ export async function handleAdminGetLead(env: Env, leadId: string): Promise<Resp
 	}
 
 	return jsonResponse(toAdminLeadDetail(row));
-}
+};
 
-export async function handleAdminUpdateLead(env: Env, request: Request, leadId: string): Promise<Response> {
+export const handleAdminUpdateLead: RouteHandler = async ({ env, request, params }) => {
+	const leadId = params.leadId;
+
 	const body = await parseJsonBody<UpdateLeadPayload>(request);
 	if (!body) {
 		return badRequest('Invalid or missing JSON body');
@@ -125,4 +130,4 @@ export async function handleAdminUpdateLead(env: Env, request: Request, leadId: 
 	const newStatus = body.status ?? existing.status;
 
 	return jsonResponse({ id: existing.id, status: newStatus });
-}
+};

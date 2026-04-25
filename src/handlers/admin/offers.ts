@@ -1,3 +1,4 @@
+import type { RouteHandler } from '../../router/types';
 import type { OfferStatus, CreateOfferPayload, UpdateOfferPayload } from '../../types/api';
 import type { OfferRow } from '../../types/db';
 import { toAdminOfferListItem } from '../../mappers/offers';
@@ -11,7 +12,7 @@ const MAX_SUMMARY_LENGTH = 2000;
 const MAX_LOCATION_LENGTH = 200;
 const MAX_URL_LENGTH = 1000;
 
-export async function handleAdminGetOffers(env: Env, url: URL): Promise<Response> {
+export const handleAdminGetOffers: RouteHandler = async ({ env, url }) => {
 	const statusFilter = url.searchParams.get('status');
 
 	if (statusFilter && !VALID_STATUSES.includes(statusFilter as OfferStatus)) {
@@ -36,9 +37,9 @@ export async function handleAdminGetOffers(env: Env, url: URL): Promise<Response
 	const data = result.results.map(toAdminOfferListItem);
 
 	return jsonResponse({ data });
-}
+};
 
-export async function handleAdminCreateOffer(env: Env, request: Request): Promise<Response> {
+export const handleAdminCreateOffer: RouteHandler = async ({ env, request }) => {
 	const body = await parseJsonBody<CreateOfferPayload>(request);
 	if (!body) {
 		return badRequest('Invalid or missing JSON body');
@@ -107,9 +108,11 @@ export async function handleAdminCreateOffer(env: Env, request: Request): Promis
 		.run();
 
 	return jsonResponse({ id, slug }, 201);
-}
+};
 
-export async function handleAdminUpdateOffer(env: Env, request: Request, offerId: string): Promise<Response> {
+export const handleAdminUpdateOffer: RouteHandler = async ({ env, request, params }) => {
+	const offerId = params.offerId;
+
 	const body = await parseJsonBody<UpdateOfferPayload>(request);
 	if (!body) {
 		return badRequest('Invalid or missing JSON body');
@@ -190,4 +193,4 @@ export async function handleAdminUpdateOffer(env: Env, request: Request, offerId
 		.run();
 
 	return jsonResponse({ id: existing.id, slug: existing.slug });
-}
+};

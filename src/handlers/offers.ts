@@ -1,9 +1,10 @@
+import type { RouteHandler } from '../router/types';
 import type { OfferRow, OfferAvailabilityRow } from '../types/db';
 import { toPublicOfferSummary, toPublicOfferDetail } from '../mappers/offers';
 import { toPublicAvailabilityPeriod } from '../mappers/availability';
 import { jsonResponse, notFound } from '../utils/response';
 
-export async function handleGetOffers(env: Env): Promise<Response> {
+export const handleGetOffers: RouteHandler = async ({ env }) => {
 	const result = await env.portal_db
 		.prepare(
 			`SELECT id, slug, title, location_name, summary, cover_image_url, created_at, updated_at
@@ -16,9 +17,11 @@ export async function handleGetOffers(env: Env): Promise<Response> {
 	const data = result.results.map(toPublicOfferSummary);
 
 	return jsonResponse({ data });
-}
+};
 
-export async function handleGetOfferBySlug(env: Env, slug: string): Promise<Response> {
+export const handleGetOfferBySlug: RouteHandler = async ({ env, params }) => {
+	const slug = params.slug;
+
 	const offer = await env.portal_db
 		.prepare(
 			`SELECT id, slug, title, location_name, summary, cover_image_url, created_at, updated_at
@@ -45,4 +48,4 @@ export async function handleGetOfferBySlug(env: Env, slug: string): Promise<Resp
 	const availability = availabilityResult.results.map(toPublicAvailabilityPeriod);
 
 	return jsonResponse(toPublicOfferDetail(offer, availability));
-}
+};

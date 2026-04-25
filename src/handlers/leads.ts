@@ -1,3 +1,4 @@
+import type { RouteHandler } from '../router/types';
 import type { SubmitLeadPayload } from '../types/api';
 import type { OfferRow } from '../types/db';
 import { jsonResponse, badRequest, parseJsonBody } from '../utils/response';
@@ -9,7 +10,7 @@ const MAX_MESSAGE_LENGTH = 2000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-export async function handleSubmitLead(env: Env, request: Request): Promise<Response> {
+export const handleSubmitLead: RouteHandler = async ({ env, request }) => {
 	const body = await parseJsonBody<SubmitLeadPayload>(request);
 	if (!body) {
 		return badRequest('Invalid or missing JSON body');
@@ -90,4 +91,4 @@ export async function handleSubmitLead(env: Env, request: Request): Promise<Resp
 		.run();
 
 	return jsonResponse({ success: true, leadId }, 201);
-}
+};
