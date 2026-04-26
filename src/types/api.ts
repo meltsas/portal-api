@@ -160,6 +160,8 @@ export interface AdminLeadDetail {
 	authProvider: string | null;
 	source: string | null;
 	adminNotes: string | null;
+	remoteIp: string | null;
+	userAgent: string | null;
 	createdAt: string;
 	updatedAt: string;
 }

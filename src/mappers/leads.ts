@@ -31,6 +31,8 @@ export function toAdminLeadDetail(row: LeadWithOfferTitleRow): AdminLeadDetail {
 		authProvider: row.auth_provider,
 		source: row.source,
 		adminNotes: row.admin_notes,
+		remoteIp: row.remote_ip,
+		userAgent: row.user_agent,
 		createdAt: toISOTimestamp(row.created_at),
 		updatedAt: toISOTimestamp(row.updated_at),
 	};

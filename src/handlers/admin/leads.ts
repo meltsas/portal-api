@@ -30,7 +30,7 @@ export const handleAdminGetLeads: RouteHandler = async ({ env, url }) => {
 	let sql =
 		`SELECT l.id, l.offer_id, l.status, l.name, l.email, l.phone, l.message,
 		        l.requested_date_from, l.requested_date_to, l.auth_provider, l.auth_subject,
-		        l.source, l.admin_notes, l.created_at, l.updated_at,
+		        l.source, l.admin_notes, l.remote_ip, l.user_agent, l.created_at, l.updated_at,
 		        o.title AS offer_title
 		 FROM leads l
 		 LEFT JOIN offers o ON l.offer_id = o.id`;

@@ -7,6 +7,7 @@ const MAX_NAME_LENGTH = 200;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_PHONE_LENGTH = 30;
 const MAX_MESSAGE_LENGTH = 2000;
+const MAX_USER_AGENT_LENGTH = 1000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -78,16 +79,25 @@ export const handleSubmitLead: RouteHandler = async ({ env, request }) => {
 		return jsonResponse({ error: 'Offer is not currently active' }, 422);
 	}
 
+	// --- Capture request metadata ---
+	// CF-Connecting-IP is set by Cloudflare's edge and cannot be spoofed by the client
+	// (in a normal, non-stacked-CDN setup). User-Agent is client-controlled, so we cap
+	// its length defensively to bound storage cost.
+
+	const remoteIp = request.headers.get('CF-Connecting-IP');
+	const rawUserAgent = request.headers.get('User-Agent');
+	const userAgent = rawUserAgent ? rawUserAgent.slice(0, MAX_USER_AGENT_LENGTH) : null;
+
 	// --- Insert lead ---
 
 	const leadId = crypto.randomUUID();
 
 	await env.portal_db
 		.prepare(
-			`INSERT INTO leads (id, offer_id, name, email, phone, message, requested_date_from, requested_date_to, source)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			`INSERT INTO leads (id, offer_id, name, email, phone, message, requested_date_from, requested_date_to, source, remote_ip, user_agent)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		)
-		.bind(leadId, offer.id, name, email, phone, message, requestedDateFrom, requestedDateTo, 'portal_form')
+		.bind(leadId, offer.id, name, email, phone, message, requestedDateFrom, requestedDateTo, 'portal_form', remoteIp, userAgent)
 		.run();
 
 	return jsonResponse({ success: true, leadId }, 201);

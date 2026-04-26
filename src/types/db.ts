@@ -35,6 +35,8 @@ export interface LeadRow {
 	auth_subject: string | null;
 	source: string | null;
 	admin_notes: string | null;
+	remote_ip: string | null;
+	user_agent: string | null;
 	created_at: string;
 	updated_at: string;
 }
