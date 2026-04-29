@@ -12,6 +12,8 @@ export function toAdminLeadListItem(row: LeadWithOfferTitleRow): AdminLeadListIt
 		phone: row.phone,
 		requestedDateFrom: row.requested_date_from,
 		requestedDateTo: row.requested_date_to,
+		remoteIp: row.remote_ip,
+		userAgent: row.user_agent,
 		createdAt: toISOTimestamp(row.created_at),
 	};
 }

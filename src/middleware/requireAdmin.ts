@@ -1,8 +1,16 @@
 import type { Middleware } from '../router/types';
+import { jsonResponse } from '../utils/response';
+import { requireAuth } from './requireAuth';
 
-// Placeholder admin guard — pass-through stub.
-// Replace this body with real Google-based authentication before relying on it
-// in production. See AGENTS.md ("Authentication Expectations").
+// Admin guard: rejects with 401 unless the request carries a valid
+// signed session cookie. The allowlist check happens at login time
+// (handlers/auth.ts) — by the time a session exists, the email is trusted.
 export function requireAdmin(): Middleware {
-	return (_context, next) => next();
+	return async (context, next) => {
+		const session = await requireAuth(context.request, context.env);
+		if (!session) {
+			return jsonResponse({ error: 'Unauthorized' }, 401);
+		}
+		return next();
+	};
 }

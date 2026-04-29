@@ -143,6 +143,8 @@ export interface AdminLeadListItem {
 	phone: string | null;
 	requestedDateFrom: string | null;
 	requestedDateTo: string | null;
+	remoteIp: string | null;
+	userAgent: string | null;
 	createdAt: string;
 }
 
