@@ -11,7 +11,7 @@ const ALLOWED_EMAILS: ReadonlySet<string> = new Set([
 	'martin.meltsas@googlemail.com',
 ]);
 
-const SESSION_TTL_SECONDS = 60 * 60 * 2;
+const SESSION_TTL_SECONDS = 60 * 60 * 24;
 
 interface GoogleAuthBody {
 	token?: unknown;
