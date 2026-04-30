@@ -104,26 +104,60 @@ describe('router', () => {
 
 	it('handles CORS preflight via global middleware', async () => {
 		const routes: Route[] = [get('/api/health', () => new Response('ok'))];
-		const response = await call(routes, 'OPTIONS', '/api/health', {}, [cors()]);
+		const response = await call(
+			routes,
+			'OPTIONS',
+			'/api/health',
+			{ headers: { Origin: 'http://localhost:5173' } },
+			[cors()],
+		);
 		expect(response.status).toBe(204);
-		expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+		expect(response.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173');
+		expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
 		expect(response.headers.get('Access-Control-Allow-Methods')).toContain('GET');
 		expect(response.headers.get('Access-Control-Max-Age')).toBe('86400');
 	});
 
 	it('appends CORS headers to non-preflight responses', async () => {
 		const routes: Route[] = [get('/api/health', () => new Response('ok'))];
-		const response = await call(routes, 'GET', '/api/health', {}, [cors()]);
+		const response = await call(
+			routes,
+			'GET',
+			'/api/health',
+			{ headers: { Origin: 'http://localhost:5173' } },
+			[cors()],
+		);
 		expect(response.status).toBe(200);
-		expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+		expect(response.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173');
+		expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
 		expect(await response.text()).toBe('ok');
 	});
 
 	it('appends CORS headers to 404 responses too', async () => {
 		const routes: Route[] = [get('/api/health', () => new Response('ok'))];
-		const response = await call(routes, 'GET', '/api/missing', {}, [cors()]);
+		const response = await call(
+			routes,
+			'GET',
+			'/api/missing',
+			{ headers: { Origin: 'http://localhost:5173' } },
+			[cors()],
+		);
 		expect(response.status).toBe(404);
-		expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+		expect(response.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173');
+	});
+
+	it('omits CORS headers when the Origin is not allowlisted', async () => {
+		const routes: Route[] = [get('/api/health', () => new Response('ok'))];
+		const response = await call(
+			routes,
+			'GET',
+			'/api/health',
+			{ headers: { Origin: 'https://evil.example.com' } },
+			[cors()],
+		);
+		expect(response.status).toBe(200);
+		expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+		expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
 	});
 
 	it('supports the put helper', async () => {

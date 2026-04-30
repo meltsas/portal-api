@@ -20,9 +20,13 @@ describe('worker entry', () => {
 	});
 
 	it('responds to CORS preflight on any path', async () => {
-		const response = await SELF.fetch('https://example.com/api/health', { method: 'OPTIONS' });
+		const response = await SELF.fetch('https://example.com/api/health', {
+			method: 'OPTIONS',
+			headers: { Origin: 'http://localhost:5173' },
+		});
 		expect(response.status).toBe(204);
-		expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+		expect(response.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173');
+		expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
 	});
 
 	it('returns 405 when method is not allowed for an existing path', async () => {
