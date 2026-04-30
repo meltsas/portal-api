@@ -131,3 +131,18 @@ export const handleAdminUpdateLead: RouteHandler = async ({ env, request, params
 
 	return jsonResponse({ id: existing.id, status: newStatus });
 };
+
+export const handleAdminRemoveLead: RouteHandler = async ({ env, params }) => {
+	const leadId = params.leadId;
+
+	const result = await env.portal_db
+		.prepare(`DELETE FROM leads WHERE id = ?`)
+		.bind(leadId)
+		.run();
+
+	if (result.meta.changes === 0) {
+		return notFound();
+	}
+
+	return jsonResponse({ id: leadId, deleted: true });
+};
