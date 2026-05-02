@@ -31,6 +31,7 @@ export interface LeadRow {
 	message: string | null;
 	requested_date_from: string | null;
 	requested_date_to: string | null;
+	reason_of_stay: string | null;
 	auth_provider: string | null;
 	auth_subject: string | null;
 	source: string | null;

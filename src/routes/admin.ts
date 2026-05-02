@@ -3,7 +3,13 @@ import type { Route } from '../router/types';
 import { requireAdmin } from '../middleware/requireAdmin';
 import { handleAdminGetOffers, handleAdminCreateOffer, handleAdminUpdateOffer } from '../handlers/admin/offers';
 import { handleAdminGetAvailability, handleAdminUpdateAvailability } from '../handlers/admin/availability';
-import { handleAdminGetLeads, handleAdminGetLead, handleAdminUpdateLead, handleAdminRemoveLead } from '../handlers/admin/leads';
+import {
+	handleAdminGetLeads,
+	handleAdminGetLead,
+	handleAdminCreateLead,
+	handleAdminUpdateLead,
+	handleAdminRemoveLead,
+} from '../handlers/admin/leads';
 
 // `requireAdmin()` is currently a pass-through stub — see middleware/requireAdmin.ts.
 // Wiring it up here so real authentication only requires editing the middleware itself.
@@ -18,6 +24,7 @@ export const adminRoutes: Route[] = [
 	put('/api/admin/offers/:offerId/availability', handleAdminUpdateAvailability, guards),
 
 	get('/api/admin/leads', handleAdminGetLeads, guards),
+	post('/api/admin/leads', handleAdminCreateLead, guards),
 	get('/api/admin/leads/:leadId', handleAdminGetLead, guards),
 	put('/api/admin/leads/:leadId', handleAdminUpdateLead, guards),
 	del('/api/admin/leads/:leadId', handleAdminRemoveLead, guards),
