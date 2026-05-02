@@ -45,3 +45,50 @@ export interface LeadRow {
 export interface LeadWithOfferTitleRow extends LeadRow {
 	offer_title: string | null;
 }
+
+export interface CustomerRow {
+	id: string;
+	source_lead_id: string | null;
+	full_name: string;
+	email: string;
+	phone: string;
+	primary_address: string;
+	date_of_birth: string;
+	national_id_number: string;
+	document_number: string;
+	occupation: string;
+	employer_or_pension_info: string;
+	income_notes: string;
+	family_members_json: string;
+	notes: string;
+	status: string;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface BookingRow {
+	id: string;
+	offer_id: string;
+	customer_id: string | null;
+	booking_type: string;
+	status: string;
+	date_from: string;
+	date_to: string;
+	reason_of_stay: string;
+	title: string;
+	notes: string;
+	adults: number;
+	children: number;
+	price_total_cents: number | null;
+	currency: string;
+	source_lead_id: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface BookingWithJoinsRow extends BookingRow {
+	offer_title: string | null;
+	offer_slug: string | null;
+	customer_full_name: string | null;
+	customer_email: string | null;
+}

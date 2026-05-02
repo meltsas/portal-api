@@ -7,6 +7,7 @@ import { jsonResponse, notFound, badRequest, parseJsonBody } from '../../utils/r
 const VALID_STATUSES: LeadStatus[] = ['new', 'contacted', 'closed', 'spam', 'archived'];
 const MAX_NAME_LENGTH = 200;
 const MAX_EMAIL_LENGTH = 254;
+const MAX_PHONE_LENGTH = 30;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_REASON_OF_STAY_LENGTH = 300;
 const MAX_ADMIN_NOTES_LENGTH = 5000;
@@ -180,11 +181,21 @@ export const handleAdminUpdateLead: RouteHandler = async ({ env, request, params
 	}
 
 	// --- Check lead exists ---
+	// Pull existing date columns so we can validate cross-field date order
+	// when only one of dateFrom/dateTo is being patched.
 
 	const existing = await env.portal_db
-		.prepare(`SELECT id, status FROM leads WHERE id = ?`)
+		.prepare(
+			`SELECT id, status, requested_date_from, requested_date_to
+			 FROM leads WHERE id = ?`
+		)
 		.bind(leadId)
-		.first<{ id: string; status: string }>();
+		.first<{
+			id: string;
+			status: string;
+			requested_date_from: string | null;
+			requested_date_to: string | null;
+		}>();
 
 	if (!existing) {
 		return notFound();
@@ -194,6 +205,9 @@ export const handleAdminUpdateLead: RouteHandler = async ({ env, request, params
 
 	const fields: string[] = [];
 	const values: unknown[] = [];
+
+	let finalDateFrom: string | null = existing.requested_date_from;
+	let finalDateTo: string | null = existing.requested_date_to;
 
 	if (body.status !== undefined) {
 		if (!VALID_STATUSES.includes(body.status)) {
@@ -209,6 +223,94 @@ export const handleAdminUpdateLead: RouteHandler = async ({ env, request, params
 			return badRequest(`adminNotes must be at most ${MAX_ADMIN_NOTES_LENGTH} characters`);
 		}
 		fields.push('admin_notes = ?');
+		values.push(val);
+	}
+
+	// `name` and `email` map to NOT NULL columns — empty/null values are rejected.
+
+	if (body.name !== undefined) {
+		if (typeof body.name !== 'string' || body.name.trim() === '') {
+			return badRequest('name must be a non-empty string');
+		}
+		const trimmed = body.name.trim();
+		if (trimmed.length > MAX_NAME_LENGTH) {
+			return badRequest(`name must be at most ${MAX_NAME_LENGTH} characters`);
+		}
+		fields.push('name = ?');
+		values.push(trimmed);
+	}
+
+	if (body.email !== undefined) {
+		if (typeof body.email !== 'string' || body.email.trim() === '') {
+			return badRequest('email must be a non-empty string');
+		}
+		const trimmed = body.email.trim().toLowerCase();
+		if (trimmed.length > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.test(trimmed)) {
+			return badRequest('Invalid email format');
+		}
+		// Note: this overrides the originally Google-verified email for leads
+		// where `auth_provider = 'google'`. Admin override is intentional;
+		// `auth_subject` is left untouched as a record of the original verification.
+		fields.push('email = ?');
+		values.push(trimmed);
+	}
+
+	// Nullable string columns: `null` or empty/whitespace-only string normalises to NULL.
+
+	if (body.phone !== undefined) {
+		const val = typeof body.phone === 'string' ? body.phone.trim() || null : null;
+		if (val && val.length > MAX_PHONE_LENGTH) {
+			return badRequest(`phone must be at most ${MAX_PHONE_LENGTH} characters`);
+		}
+		fields.push('phone = ?');
+		values.push(val);
+	}
+
+	if (body.message !== undefined) {
+		const val = typeof body.message === 'string' ? body.message.trim() || null : null;
+		if (val && val.length > MAX_MESSAGE_LENGTH) {
+			return badRequest(`message must be at most ${MAX_MESSAGE_LENGTH} characters`);
+		}
+		fields.push('message = ?');
+		values.push(val);
+	}
+
+	if (body.requestedDateFrom !== undefined) {
+		if (body.requestedDateFrom !== null) {
+			if (typeof body.requestedDateFrom !== 'string' || !DATE_PATTERN.test(body.requestedDateFrom)) {
+				return badRequest('requestedDateFrom must be YYYY-MM-DD or null');
+			}
+			finalDateFrom = body.requestedDateFrom;
+		} else {
+			finalDateFrom = null;
+		}
+		fields.push('requested_date_from = ?');
+		values.push(finalDateFrom);
+	}
+
+	if (body.requestedDateTo !== undefined) {
+		if (body.requestedDateTo !== null) {
+			if (typeof body.requestedDateTo !== 'string' || !DATE_PATTERN.test(body.requestedDateTo)) {
+				return badRequest('requestedDateTo must be YYYY-MM-DD or null');
+			}
+			finalDateTo = body.requestedDateTo;
+		} else {
+			finalDateTo = null;
+		}
+		fields.push('requested_date_to = ?');
+		values.push(finalDateTo);
+	}
+
+	if (finalDateFrom && finalDateTo && finalDateFrom > finalDateTo) {
+		return badRequest('requestedDateFrom must not be after requestedDateTo');
+	}
+
+	if (body.reasonOfStay !== undefined) {
+		const val = typeof body.reasonOfStay === 'string' ? body.reasonOfStay.trim() || null : null;
+		if (val && val.length > MAX_REASON_OF_STAY_LENGTH) {
+			return badRequest(`reasonOfStay must be at most ${MAX_REASON_OF_STAY_LENGTH} characters`);
+		}
+		fields.push('reason_of_stay = ?');
 		values.push(val);
 	}
 

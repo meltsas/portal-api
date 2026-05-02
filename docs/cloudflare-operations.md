@@ -46,7 +46,8 @@ Vaata remote D1 andmebaasi infot:
 npx wrangler d1 info portal-db
 ```
 
-See annab üldise info remote andmebaasi kohta, näiteks andmebaasi ID, suurus ja muu olekuinfo.
+See annab üldise info remote andmebaasi kohta,
+näiteks andmebaasi ID, suurus ja muu olekuinfo.
 
 ---
 

@@ -10,6 +10,18 @@ import {
 	handleAdminUpdateLead,
 	handleAdminRemoveLead,
 } from '../handlers/admin/leads';
+import {
+	handleAdminGetCustomers,
+	handleAdminGetCustomer,
+	handleAdminCreateCustomer,
+	handleAdminUpdateCustomer,
+} from '../handlers/admin/customers';
+import {
+	handleAdminGetBookings,
+	handleAdminGetBooking,
+	handleAdminCreateBooking,
+	handleAdminUpdateBooking,
+} from '../handlers/admin/bookings';
 
 // `requireAdmin()` is currently a pass-through stub — see middleware/requireAdmin.ts.
 // Wiring it up here so real authentication only requires editing the middleware itself.
@@ -28,4 +40,14 @@ export const adminRoutes: Route[] = [
 	get('/api/admin/leads/:leadId', handleAdminGetLead, guards),
 	put('/api/admin/leads/:leadId', handleAdminUpdateLead, guards),
 	del('/api/admin/leads/:leadId', handleAdminRemoveLead, guards),
+
+	get('/api/admin/customers', handleAdminGetCustomers, guards),
+	post('/api/admin/customers', handleAdminCreateCustomer, guards),
+	get('/api/admin/customers/:id', handleAdminGetCustomer, guards),
+	put('/api/admin/customers/:id', handleAdminUpdateCustomer, guards),
+
+	get('/api/admin/bookings', handleAdminGetBookings, guards),
+	post('/api/admin/bookings', handleAdminCreateBooking, guards),
+	get('/api/admin/bookings/:id', handleAdminGetBooking, guards),
+	put('/api/admin/bookings/:id', handleAdminUpdateBooking, guards),
 ];
