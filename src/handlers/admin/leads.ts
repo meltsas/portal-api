@@ -1,11 +1,24 @@
 import type { RouteHandler } from '../../router/types';
-import type { LeadStatus, UpdateLeadPayload } from '../../types/api';
-import type { LeadWithOfferTitleRow } from '../../types/db';
+import type { LeadStatus, CreateLeadPayload, UpdateLeadPayload } from '../../types/api';
+import type { LeadWithOfferTitleRow, OfferRow } from '../../types/db';
 import { toAdminLeadListItem, toAdminLeadDetail } from '../../mappers/leads';
 import { jsonResponse, notFound, badRequest, parseJsonBody } from '../../utils/response';
 
 const VALID_STATUSES: LeadStatus[] = ['new', 'contacted', 'closed', 'spam', 'archived'];
+const MAX_NAME_LENGTH = 200;
+const MAX_EMAIL_LENGTH = 254;
+const MAX_MESSAGE_LENGTH = 2000;
+const MAX_REASON_OF_STAY_LENGTH = 300;
 const MAX_ADMIN_NOTES_LENGTH = 5000;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const LEAD_SELECT_COLUMNS =
+	`l.id, l.offer_id, l.status, l.name, l.email, l.phone, l.message,
+	 l.requested_date_from, l.requested_date_to, l.reason_of_stay,
+	 l.auth_provider, l.auth_subject, l.source, l.admin_notes,
+	 l.remote_ip, l.user_agent, l.created_at, l.updated_at,
+	 o.title AS offer_title`;
 
 export const handleAdminGetLeads: RouteHandler = async ({ env, url }) => {
 	const statusFilter = url.searchParams.get('status');
@@ -28,10 +41,7 @@ export const handleAdminGetLeads: RouteHandler = async ({ env, url }) => {
 	}
 
 	let sql =
-		`SELECT l.id, l.offer_id, l.status, l.name, l.email, l.phone, l.message,
-		        l.requested_date_from, l.requested_date_to, l.auth_provider, l.auth_subject,
-		        l.source, l.admin_notes, l.remote_ip, l.user_agent, l.created_at, l.updated_at,
-		        o.title AS offer_title
+		`SELECT ${LEAD_SELECT_COLUMNS}
 		 FROM leads l
 		 LEFT JOIN offers o ON l.offer_id = o.id`;
 
@@ -56,10 +66,7 @@ export const handleAdminGetLead: RouteHandler = async ({ env, params }) => {
 
 	const row = await env.portal_db
 		.prepare(
-			`SELECT l.id, l.offer_id, l.status, l.name, l.email, l.phone, l.message,
-			        l.requested_date_from, l.requested_date_to, l.auth_provider, l.auth_subject,
-			        l.source, l.admin_notes, l.remote_ip, l.user_agent, l.created_at, l.updated_at,
-			        o.title AS offer_title
+			`SELECT ${LEAD_SELECT_COLUMNS}
 			 FROM leads l
 			 LEFT JOIN offers o ON l.offer_id = o.id
 			 WHERE l.id = ?`
@@ -72,6 +79,96 @@ export const handleAdminGetLead: RouteHandler = async ({ env, params }) => {
 	}
 
 	return jsonResponse(toAdminLeadDetail(row));
+};
+
+export const handleAdminCreateLead: RouteHandler = async ({ env, request }) => {
+	const body = await parseJsonBody<CreateLeadPayload>(request);
+	if (!body) {
+		return badRequest('Invalid or missing JSON body');
+	}
+
+	// --- Required fields ---
+
+	if (typeof body.offerId !== 'string' || body.offerId.trim() === '') {
+		return badRequest('offerId is required');
+	}
+	if (typeof body.email !== 'string' || body.email.trim() === '') {
+		return badRequest('email is required');
+	}
+	if (typeof body.name !== 'string' || body.name.trim() === '') {
+		return badRequest('name is required');
+	}
+	if (typeof body.message !== 'string' || body.message.trim() === '') {
+		return badRequest('message is required');
+	}
+	if (typeof body.dateFrom !== 'string' || !DATE_PATTERN.test(body.dateFrom)) {
+		return badRequest('dateFrom must be YYYY-MM-DD');
+	}
+	if (typeof body.dateTo !== 'string' || !DATE_PATTERN.test(body.dateTo)) {
+		return badRequest('dateTo must be YYYY-MM-DD');
+	}
+
+	const offerId = body.offerId.trim();
+	const email = body.email.trim().toLowerCase();
+	const name = body.name.trim();
+	const message = body.message.trim();
+	const dateFrom = body.dateFrom.trim();
+	const dateTo = body.dateTo.trim();
+
+	if (email.length > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.test(email)) {
+		return badRequest('Invalid email format');
+	}
+	if (name.length > MAX_NAME_LENGTH) {
+		return badRequest(`name must be at most ${MAX_NAME_LENGTH} characters`);
+	}
+	if (message.length > MAX_MESSAGE_LENGTH) {
+		return badRequest(`message must be at most ${MAX_MESSAGE_LENGTH} characters`);
+	}
+	if (dateFrom > dateTo) {
+		return badRequest('dateFrom must not be after dateTo');
+	}
+
+	// --- Optional reasonOfStay ---
+
+	let reasonOfStay: string | null = null;
+	if (body.reasonOfStay !== undefined && body.reasonOfStay !== null) {
+		if (typeof body.reasonOfStay !== 'string') {
+			return badRequest('reasonOfStay must be a string');
+		}
+		const trimmed = body.reasonOfStay.trim();
+		if (trimmed.length > MAX_REASON_OF_STAY_LENGTH) {
+			return badRequest(`reasonOfStay must be at most ${MAX_REASON_OF_STAY_LENGTH} characters`);
+		}
+		reasonOfStay = trimmed.length > 0 ? trimmed : null;
+	}
+
+	// --- Resolve offer ---
+
+	const offer = await env.portal_db
+		.prepare(`SELECT id FROM offers WHERE id = ?`)
+		.bind(offerId)
+		.first<Pick<OfferRow, 'id'>>();
+
+	if (!offer) {
+		return badRequest('Offer not found');
+	}
+
+	// --- Insert ---
+	// Admin-created leads have no Google identity verification: auth_provider /
+	// auth_subject stay NULL and source distinguishes the row from the public flow.
+
+	const id = crypto.randomUUID();
+
+	await env.portal_db
+		.prepare(
+			`INSERT INTO leads (id, offer_id, name, email, message, requested_date_from, requested_date_to,
+			                    reason_of_stay, source)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		)
+		.bind(id, offer.id, name, email, message, dateFrom, dateTo, reasonOfStay, 'admin_manual')
+		.run();
+
+	return jsonResponse({ id }, 201);
 };
 
 export const handleAdminUpdateLead: RouteHandler = async ({ env, request, params }) => {

@@ -42,22 +42,21 @@ export interface PublicAvailabilityPeriod {
 }
 
 // -------------------------------------------------------
-// Lead submission (future protected)
+// Lead submission (Google ID token verified per request)
 // -------------------------------------------------------
 
 export interface SubmitLeadPayload {
-	offerSlug: string;
+	offerId: string;
 	name: string;
-	email: string;
-	phone?: string | null;
-	message?: string | null;
-	requestedDateFrom?: string | null;
-	requestedDateTo?: string | null;
+	message: string;
+	dateFrom: string;
+	dateTo: string;
+	googleToken: string;
+	reasonOfStay?: string | null;
 }
 
 export interface SubmitLeadResponse {
-	success: true;
-	leadId: string;
+	ok: true;
 }
 
 // -------------------------------------------------------
@@ -136,16 +135,23 @@ export interface UpdateAvailabilityResponse {
 
 export interface AdminLeadListItem {
 	id: string;
+	offerId: string | null;
 	offerTitle: string | null;
 	status: LeadStatus;
 	name: string;
 	email: string;
 	phone: string | null;
+	message: string | null;
 	requestedDateFrom: string | null;
 	requestedDateTo: string | null;
+	reasonOfStay: string | null;
+	authProvider: string | null;
+	source: string | null;
+	adminNotes: string | null;
 	remoteIp: string | null;
 	userAgent: string | null;
 	createdAt: string;
+	updatedAt: string;
 }
 
 export interface AdminLeadDetail {
@@ -159,6 +165,7 @@ export interface AdminLeadDetail {
 	message: string | null;
 	requestedDateFrom: string | null;
 	requestedDateTo: string | null;
+	reasonOfStay: string | null;
 	authProvider: string | null;
 	source: string | null;
 	adminNotes: string | null;
@@ -166,6 +173,20 @@ export interface AdminLeadDetail {
 	userAgent: string | null;
 	createdAt: string;
 	updatedAt: string;
+}
+
+export interface CreateLeadPayload {
+	offerId: string;
+	email: string;
+	name: string;
+	message: string;
+	dateFrom: string;
+	dateTo: string;
+	reasonOfStay?: string | null;
+}
+
+export interface CreateLeadResponse {
+	id: string;
 }
 
 export interface UpdateLeadPayload {
