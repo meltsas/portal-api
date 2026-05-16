@@ -92,3 +92,32 @@ export interface BookingWithJoinsRow extends BookingRow {
 	customer_full_name: string | null;
 	customer_email: string | null;
 }
+
+export interface ExternalDataSourceRow {
+	id: string;
+	type: string;
+	provider: string;
+	name: string;
+	is_active: number;
+	publish_to_github: number;
+	github_file_path: string | null;
+	latest_snapshot_id: string | null;
+	latest_data_hash: string | null;
+	latest_updated_at: string | null;
+	latest_published_commit_sha: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ExternalDataSnapshotRow {
+	id: string;
+	source_id: string;
+	status: string;
+	fetched_at: string;
+	data_hash: string | null;
+	normalized_json: string | null;
+	raw_r2_key: string | null;
+	error_message: string | null;
+	published_commit_sha: string | null;
+	created_at: string;
+}

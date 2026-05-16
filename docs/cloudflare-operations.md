@@ -681,7 +681,47 @@ npx wrangler secret put OPENAI_API_KEY
 
 ---
 
-## 21. README.md viide
+## 21. Scheduled / cron triggerid
+
+Workeri scheduled handler asub `src/index.ts` failis ja delegeerib töö failidesse
+kaustas `src/scheduled/`. Cron-ide nimekiri elab `wrangler.jsonc` all
+`triggers.crons` ning peab püsima sünkroonis `src/scheduled/handlers.ts`
+konstantidega — `scheduled()` käsitleja dispetšerdab `controller.cron` järgi.
+
+Hetkel registreeritud cron-id:
+
+- `0 * * * *` — tunnine välisandmete fetch (Open-Meteo current weather jne).
+  Iga `external_data_sources` rida, mille `is_active = 1`, fetchitakse,
+  hash arvutatakse ning kui see erineb `latest_data_hash`-ist, salvestatakse
+  uus `success` snapshot ning uuendatakse `latest_*` viidad. Sama hash =
+  kerge `skipped` snapshot. Vea korral `failed` snapshot, viidad jäävad
+  puutumata.
+- `0 */8 * * *` — placeholder tulevasele GitHub export/commit cron-ile
+  (`runGithubExportPlaceholder`). Hetkel ainult logib.
+
+### Uue välise andmeallika lisamine
+
+1. Loo uus fail `src/scheduled/dataSources/<source>.ts`, mis ekspordib
+   `DataSourceDefinition` (vt `openMeteo.ts` näiteks).
+2. Lisa see `src/scheduled/registry.ts` `DATA_SOURCES` listi.
+3. Lisa migratsioon, mis loob rea tabelisse `external_data_sources`
+   (id, type, provider, name, publish_to_github, github_file_path jne).
+4. Rakenda migratsioon (`npm run db:migrate:local`, hiljem `--remote`).
+5. Allikas hakkab tundise cron-iga automaatselt fetchima.
+
+### Lokaalne cron testimine
+
+Wrangleri dev-server võimaldab cron-i käivitada käsitsi:
+
+```bash
+curl "http://localhost:8787/__scheduled?cron=0+*+*+*+*"
+```
+
+`curl` URL-i `+` märgid asendavad cron-stringi tühikuid.
+
+---
+
+## 22. README.md viide
 
 Soovitus: lisa projekti `README.md` faili lühike viide:
 

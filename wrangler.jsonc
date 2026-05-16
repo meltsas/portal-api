@@ -25,7 +25,18 @@
 	"upload_source_maps": true,
 	"compatibility_flags": [
 		"nodejs_compat"
-	]
+	],
+	// Scheduled (cron) triggers. Keep cron expressions in sync with the
+	// constants in `src/scheduled/handlers.ts` — the scheduled() handler
+	// dispatches on `controller.cron`.
+	//   "0 * * * *"   hourly external data fetch (Open-Meteo, etc.)
+	//   "0 0/8 * * *" every 8 hours, placeholder for the GitHub export job
+	"triggers": {
+		"crons": [
+			"0 * * * *",
+			"0 */8 * * *"
+		]
+	}
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
