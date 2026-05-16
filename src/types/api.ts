@@ -375,3 +375,62 @@ export interface CreateBookingResponse {
 export interface UpdateBookingResponse {
 	id: string;
 }
+
+// -------------------------------------------------------
+// Admin — external data (scheduled fetch system)
+// -------------------------------------------------------
+
+export type ExternalDataSnapshotStatus = 'success' | 'failed' | 'skipped';
+
+export interface AdminExternalDataSource {
+	id: string;
+	type: string;
+	provider: string;
+	name: string;
+	isActive: boolean;
+	publishToGithub: boolean;
+	githubFilePath: string | null;
+	latestSnapshotId: string | null;
+	latestDataHash: string | null;
+	latestUpdatedAt: string | null;
+	latestPublishedCommitSha: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface AdminExternalDataSnapshotListItem {
+	id: string;
+	sourceId: string;
+	status: ExternalDataSnapshotStatus;
+	fetchedAt: string;
+	dataHash: string | null;
+	errorMessage: string | null;
+	publishedCommitSha: string | null;
+	createdAt: string;
+}
+
+export interface AdminExternalDataSnapshotDetail extends AdminExternalDataSnapshotListItem {
+	normalizedJson: string | null;
+	rawR2Key: string | null;
+}
+
+export interface RunExternalDataSourceResponse {
+	sourceId: string;
+	status: 'success' | 'skipped' | 'failed';
+	snapshotId: string | null;
+	dataHash: string | null;
+	fetchedAt: string;
+	errorMessage: string | null;
+}
+
+export interface CleanupExternalDataSnapshotsPayload {
+	olderThanDays?: number;
+	keepLatest?: boolean;
+}
+
+export interface CleanupExternalDataSnapshotsResponse {
+	sourceId: string;
+	deletedCount: number;
+	olderThanDays: number;
+	keepLatest: boolean;
+}

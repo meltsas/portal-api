@@ -16,8 +16,8 @@ export const CRON_GITHUB_EXPORT_PLACEHOLDER = '0 */8 * * *';
 export async function runHourlyFetch(env: Env): Promise<void> {
 	for (const definition of DATA_SOURCES) {
 		try {
-			const status = await runDataSourceFetch(env, definition);
-			console.log(`[scheduled] hourly ${definition.provider}:${definition.id} -> ${status}`);
+			const result = await runDataSourceFetch(env, definition);
+			console.log(`[scheduled] hourly ${definition.provider}:${definition.id} -> ${result.status}`);
 		} catch (err) {
 			// runDataSourceFetch already records `failed` snapshots for fetch errors;
 			// this catch only covers truly unexpected errors (e.g. D1 outages).

@@ -2,6 +2,16 @@ import type { ExternalDataSourceRow } from '../types/db';
 import type { DataSourceDefinition } from './types';
 import { stableHash } from './hash';
 
+export type RunFetchStatus = 'success' | 'skipped' | 'failed' | 'inactive' | 'missing';
+
+export interface RunFetchResult {
+	status: RunFetchStatus;
+	snapshotId: string | null;
+	dataHash: string | null;
+	fetchedAtIso: string | null;
+	errorMessage: string | null;
+}
+
 /**
  * Run one data-source fetch end-to-end:
  *   1. Look up the source row in D1.
@@ -14,13 +24,14 @@ import { stableHash } from './hash';
  *      latest pointer, so the previous successful data stays the source
  *      of truth.
  *
- * Returns the resulting status string so the cron handler can log per-source.
+ * Returns a structured result that callers (cron handler, admin run endpoint)
+ * can surface to logs or HTTP responses.
  */
 export async function runDataSourceFetch(
 	env: Env,
 	definition: DataSourceDefinition,
 	opts?: { signal?: AbortSignal },
-): Promise<'success' | 'skipped' | 'failed' | 'inactive' | 'missing'> {
+): Promise<RunFetchResult> {
 	const source = await env.portal_db
 		.prepare(
 			`SELECT id, type, provider, name, is_active, publish_to_github, github_file_path,
@@ -34,11 +45,11 @@ export async function runDataSourceFetch(
 
 	if (!source) {
 		console.warn(`[scheduled] data source '${definition.id}' has no row in external_data_sources — skipping.`);
-		return 'missing';
+		return { status: 'missing', snapshotId: null, dataHash: null, fetchedAtIso: null, errorMessage: null };
 	}
 
 	if (source.is_active !== 1) {
-		return 'inactive';
+		return { status: 'inactive', snapshotId: null, dataHash: null, fetchedAtIso: null, errorMessage: null };
 	}
 
 	const fetchedAtIso = new Date().toISOString();
@@ -46,27 +57,37 @@ export async function runDataSourceFetch(
 	let normalized: unknown;
 	let dataHash: string;
 	try {
-		const result = await definition.
-		fetchAndNormalize({ env, signal: opts?.signal });
+		const result = await definition.fetchAndNormalize({ env, signal: opts?.signal });
 		normalized = result.normalized;
 		dataHash = await stableHash(normalized);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
+		const truncated = truncate(message, 1000);
+		const snapshotId = crypto.randomUUID();
 		await insertSnapshot(env, {
+			id: snapshotId,
 			sourceId: source.id,
 			status: 'failed',
 			fetchedAtIso,
 			dataHash: null,
 			normalizedJson: null,
-			errorMessage: truncate(message, 1000),
+			errorMessage: truncated,
 		});
 		console.warn(`[scheduled] ${definition.provider}:${definition.id} failed: ${message}`);
-		return 'failed';
+		return {
+			status: 'failed',
+			snapshotId,
+			dataHash: null,
+			fetchedAtIso,
+			errorMessage: truncated,
+		};
 	}
 
 	if (source.latest_data_hash && source.latest_data_hash === dataHash) {
 		// Hash unchanged: keep a lightweight observability row but skip the heavy fields.
+		const snapshotId = crypto.randomUUID();
 		await insertSnapshot(env, {
+			id: snapshotId,
 			sourceId: source.id,
 			status: 'skipped',
 			fetchedAtIso,
@@ -74,7 +95,13 @@ export async function runDataSourceFetch(
 			normalizedJson: null,
 			errorMessage: null,
 		});
-		return 'skipped';
+		return {
+			status: 'skipped',
+			snapshotId,
+			dataHash,
+			fetchedAtIso,
+			errorMessage: null,
+		};
 	}
 
 	const snapshotId = crypto.randomUUID();
@@ -100,11 +127,17 @@ export async function runDataSourceFetch(
 		.bind(snapshotId, dataHash, fetchedAtIso, source.id)
 		.run();
 
-	return 'success';
+	return {
+		status: 'success',
+		snapshotId,
+		dataHash,
+		fetchedAtIso,
+		errorMessage: null,
+	};
 }
 
 interface InsertSnapshotInput {
-	id?: string;
+	id: string;
 	sourceId: string;
 	status: 'success' | 'skipped' | 'failed';
 	fetchedAtIso: string;
@@ -114,7 +147,6 @@ interface InsertSnapshotInput {
 }
 
 async function insertSnapshot(env: Env, input: InsertSnapshotInput): Promise<void> {
-	const id = input.id ?? crypto.randomUUID();
 	await env.portal_db
 		.prepare(
 			`INSERT INTO external_data_snapshots
@@ -122,7 +154,7 @@ async function insertSnapshot(env: Env, input: InsertSnapshotInput): Promise<voi
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		)
 		.bind(
-			id,
+			input.id,
 			input.sourceId,
 			input.status,
 			input.fetchedAtIso,

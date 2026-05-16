@@ -1089,7 +1089,219 @@ Overlap'i kontroll käivitub uuesti **kui** resulting status on blocking (`tenta
 
 ---
 
-## 12. Endpointide kokkuvõte
+## 12. Admin — External data (scheduled fetch system)
+
+Tabelid `external_data_sources` ja `external_data_snapshots` (vt migration `0006_external_data_sources.sql`) hoiavad infot väliste andmeallikate (nt Open-Meteo current weather) tunnise cron-fetchi kohta. Need endpointid on **debug / admin tooling**: lubavad listida konfigureeritud allikaid, vaadata viimast snapshot'i, vaadata kõiki snapshot'eid (sh `failed` ja `skipped`), käivitada käsitsi fetchi (oluline lokaalseks testimiseks ilma Cron Triggerit deploy'imata) ja koristada vanu snapshot'eid.
+
+Snapshot'i statused (mida cron loob):
+
+- `success` — uus payload erines viimase `success`'i hash'ist. Salvestab `normalizedJson`'i ja uuendab allika `latest_*` viidad.
+- `skipped` — fetch õnnestus, aga sisu hash on sama kui `latest_data_hash`. Snapshot kirjutatakse minimaalsete väljadega (`normalizedJson = NULL`) puhtalt observability eesmärgil.
+- `failed` — fetch või validatsioon ebaõnnestus. `errorMessage` salvestatakse, `latest_*` viidad **ei muutu**, st viimane `success` jääb tõe-allikaks.
+
+Kõik need endpointid on admin-only (`requireAdmin()` guard). Eriti POST `/run` ja POST `/cleanup` peavad olema kaitstud.
+
+---
+
+### `GET /api/admin/external-data/sources`
+
+Listib `external_data_sources` ridu, sorteeritud `created_at DESC`.
+
+**Query params:**
+
+- `limit` — optional integer, default 50, max 100.
+- `offset` — optional integer >= 0, default 0.
+
+**Response 200:**
+
+```json
+{
+  "data": [
+    {
+      "id": "weather_current_costa_blanca",
+      "type": "weather_current",
+      "provider": "open-meteo",
+      "name": "Current weather for Costa Blanca / nearby locations",
+      "isActive": true,
+      "publishToGithub": true,
+      "githubFilePath": "src/data/weather/current.json",
+      "latestSnapshotId": "1f2e...-uuid",
+      "latestDataHash": "9d4c4a...",
+      "latestUpdatedAt": "2026-05-17T08:00:00.000Z",
+      "latestPublishedCommitSha": null,
+      "createdAt": "2026-05-16T18:30:00.000Z",
+      "updatedAt": "2026-05-17T08:00:00.000Z"
+    }
+  ],
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Response 400:** `limit must be an integer`, `limit must be at most 100`, `offset must be at least 0` jne.
+
+---
+
+### `GET /api/admin/external-data/sources/:id`
+
+Tagastab ühe allika (id = `external_data_sources.id`, nt `weather_current_costa_blanca`).
+
+**Response 200:** sama kuju nagu eelmise endpointi `data[]` element.
+
+**Response 404:** allikat ei leitud.
+
+---
+
+### `GET /api/admin/external-data/sources/:id/snapshots`
+
+Listib ühe allika snapshot'id, sorteeritud `fetched_at DESC`. `normalizedJson` **ei** ole listis — kasuta detail-endpointi.
+
+**Path params:**
+
+- `id` — allika id.
+
+**Query params:**
+
+- `limit` — optional integer, default 50, max 100.
+- `offset` — optional integer >= 0, default 0.
+- `status` — optional, üks väärtustest `success` / `failed` / `skipped`.
+
+**Response 200:**
+
+```json
+{
+  "data": [
+    {
+      "id": "1f2e...-uuid",
+      "sourceId": "weather_current_costa_blanca",
+      "status": "success",
+      "fetchedAt": "2026-05-17T08:00:00.000Z",
+      "dataHash": "9d4c4a...",
+      "errorMessage": null,
+      "publishedCommitSha": null,
+      "createdAt": "2026-05-17T08:00:00.000Z"
+    }
+  ],
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Response 400:** `Invalid status filter. Must be one of: success, failed, skipped`, pagination errors.
+
+**Response 404:** allikat ei leitud.
+
+---
+
+### `GET /api/admin/external-data/snapshots/:id`
+
+Tagastab ühe snapshot'i koos `normalizedJson`-iga (kui see `success` puhul on olemas).
+
+**Response 200:**
+
+```json
+{
+  "id": "1f2e...-uuid",
+  "sourceId": "weather_current_costa_blanca",
+  "status": "success",
+  "fetchedAt": "2026-05-17T08:00:00.000Z",
+  "dataHash": "9d4c4a...",
+  "errorMessage": null,
+  "publishedCommitSha": null,
+  "createdAt": "2026-05-17T08:00:00.000Z",
+  "normalizedJson": "{\"sourceId\":\"weather_current_costa_blanca\",\"fetchedAtIso\":\"...\",\"locations\":[...]}",
+  "rawR2Key": null
+}
+```
+
+`normalizedJson` on **string** (D1 hoiab seda JSON-tekstina, mitte parsitud objektina). Admin UI peaks selle parsima kliendi poolel.
+
+**Response 404:** snapshot'i ei leitud.
+
+---
+
+### `POST /api/admin/external-data/sources/:id/run`
+
+Käivitab käsitsi sama fetch / validate / normalize / save loogika nagu tunnine cron. Mõeldud lokaalseks testimiseks ja debug-juhtumiteks.
+
+**Path params:**
+
+- `id` — allika id. Peab vastama nii koodipoolsele registreeritud `DataSourceDefinition`-ile (`src/scheduled/registry.ts`) kui ka DB-reale.
+
+**Request body:** puudub (`POST` ilma body-ta on OK).
+
+**Response 200:**
+
+```json
+{
+  "sourceId": "weather_current_costa_blanca",
+  "status": "success",
+  "snapshotId": "1f2e...-uuid",
+  "dataHash": "9d4c4a...",
+  "fetchedAt": "2026-05-17T08:01:23.000Z",
+  "errorMessage": null
+}
+```
+
+`status` võimalikud väärtused:
+
+- `success` — fetch õnnestus ja sisu hash erines viimasest. `snapshotId` ja `dataHash` on täidetud. `latest_*` viidad on uuendatud.
+- `skipped` — fetch õnnestus, aga sisu hash on sama kui `latest_data_hash`. Snapshot loodi minimaalse kujuga; `latest_*` viidad **ei** muutu.
+- `failed` — fetch või validatsioon ebaõnnestus. `errorMessage` sisaldab põhjuse (kuni 1000 chars). `snapshotId` osutab `failed` snapshot'ile. `latest_*` viidad **ei** muutu.
+
+**Response 404:** allikat ei leitud (ei koodis ega DB-s).
+
+**Response 422:**
+
+- `{ "error": "No fetcher is registered for this data source" }` — DB rea on olemas, aga koodis pole registreeritud `DataSourceDefinition`-i. Lisa allikas `src/scheduled/registry.ts`'i.
+- `{ "error": "Data source is not active" }` — `is_active = 0`. Aktiveeri allikas D1-s (admin UI / SQL).
+
+---
+
+### `POST /api/admin/external-data/sources/:id/cleanup`
+
+Kustutab vanu snapshot'e ühele allikale. Vaikimisi jätab viimase `success`-i snapshot'i alles olenemata vanusest (selle ID on `external_data_sources.latest_snapshot_id`).
+
+**Path params:**
+
+- `id` — allika id.
+
+**Request body (`CleanupExternalDataSnapshotsPayload`, kõik väljad optional):**
+
+```json
+{
+  "olderThanDays": 3,
+  "keepLatest": true
+}
+```
+
+Validation:
+
+- `olderThanDays` — optional integer >= 1, max 3650. Default 3. Mitte-täisarv või väike väärtus tagastab 400.
+- `keepLatest` — optional boolean. Default `true`. Kui `true` ja allikal on `latest_snapshot_id`, jäetakse see rida kustutamisest välja olenemata vanusest.
+
+Tühi body (`{}` või puuduv body) on lubatud — rakendatakse defaultid.
+
+**Response 200:**
+
+```json
+{
+  "sourceId": "weather_current_costa_blanca",
+  "deletedCount": 12,
+  "olderThanDays": 3,
+  "keepLatest": true
+}
+```
+
+`deletedCount` tuleb D1 `meta.changes`-ist.
+
+**Response 400:** validation error (`olderThanDays must be at least 1`, `olderThanDays must be at most 3650`, `keepLatest must be a boolean` jne).
+
+**Response 404:** allikat ei leitud.
+
+---
+
+## 13. Endpointide kokkuvõte
 
 | Method   | Path                                              | Auth   | Kirjeldus                                      |
 | -------- | ------------------------------------------------- | ------ | ---------------------------------------------- |
@@ -1118,10 +1330,16 @@ Overlap'i kontroll käivitub uuesti **kui** resulting status on blocking (`tenta
 | `POST`   | `/api/admin/bookings`                             | admin  | Loo booking (overlap-kontroll)                 |
 | `GET`    | `/api/admin/bookings/:id`                         | admin  | Booking'u detailvaade                          |
 | `PUT`    | `/api/admin/bookings/:id`                         | admin  | Uuenda booking'ut (overlap-kontroll)           |
+| `GET`    | `/api/admin/external-data/sources`                | admin  | Listi välised andmeallikad                     |
+| `GET`    | `/api/admin/external-data/sources/:id`            | admin  | Allika detailvaade                             |
+| `GET`    | `/api/admin/external-data/sources/:id/snapshots`  | admin  | Allika snapshot'ide list (filter: `?status=`)  |
+| `POST`   | `/api/admin/external-data/sources/:id/run`        | admin  | Käivita allika fetch käsitsi                   |
+| `POST`   | `/api/admin/external-data/sources/:id/cleanup`    | admin  | Kustuta vanu snapshot'eid                      |
+| `GET`    | `/api/admin/external-data/snapshots/:id`          | admin  | Snapshot'i detail (sh `normalizedJson`)        |
 
 ---
 
-## 13. README.md viide
+## 14. README.md viide
 
 Soovitus: lisa projekti `README.md` faili lühike viide:
 

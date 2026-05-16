@@ -22,6 +22,14 @@ import {
 	handleAdminCreateBooking,
 	handleAdminUpdateBooking,
 } from '../handlers/admin/bookings';
+import {
+	handleAdminCleanupExternalDataSnapshots,
+	handleAdminGetExternalDataSnapshot,
+	handleAdminGetExternalDataSnapshots,
+	handleAdminGetExternalDataSource,
+	handleAdminGetExternalDataSources,
+	handleAdminRunExternalDataSource,
+} from '../handlers/admin/externalData';
 
 // `requireAdmin()` is currently a pass-through stub — see middleware/requireAdmin.ts.
 // Wiring it up here so real authentication only requires editing the middleware itself.
@@ -50,4 +58,11 @@ export const adminRoutes: Route[] = [
 	post('/api/admin/bookings', handleAdminCreateBooking, guards),
 	get('/api/admin/bookings/:id', handleAdminGetBooking, guards),
 	put('/api/admin/bookings/:id', handleAdminUpdateBooking, guards),
+
+	get('/api/admin/external-data/sources', handleAdminGetExternalDataSources, guards),
+	get('/api/admin/external-data/sources/:id', handleAdminGetExternalDataSource, guards),
+	get('/api/admin/external-data/sources/:id/snapshots', handleAdminGetExternalDataSnapshots, guards),
+	post('/api/admin/external-data/sources/:id/run', handleAdminRunExternalDataSource, guards),
+	post('/api/admin/external-data/sources/:id/cleanup', handleAdminCleanupExternalDataSnapshots, guards),
+	get('/api/admin/external-data/snapshots/:id', handleAdminGetExternalDataSnapshot, guards),
 ];
