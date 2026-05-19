@@ -11,7 +11,7 @@ import type { DataSourceDefinition, DataSourceFetchResult } from '../types';
  * is introduced, switch this to an import.
  */
 
-const FETCH_TIMEOUT_MS = 12000;
+const FETCH_TIMEOUT_MS = 15000;
 const TIMEZONE = 'Europe/Madrid';
 // Hourly cron + a 30-minute grace window. Tells consumers when this data is
 // considered "expected to be refreshed by".
