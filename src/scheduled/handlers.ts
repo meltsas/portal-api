@@ -6,7 +6,7 @@ import { runDataSourceFetch } from './runFetch';
  * `controller.cron`. Keep the cron expressions in sync with `wrangler.jsonc`.
  */
 
-export const CRON_HOURLY_FETCH = '0 * * * *';
+export const CRON_HOURLY_FETCH = '7 * * * *';
 export const CRON_GITHUB_EXPORT_PLACEHOLDER = '0 */8 * * *';
 
 /**

@@ -33,7 +33,7 @@
 	//   "0 0/8 * * *" every 8 hours, placeholder for the GitHub export job
 	"triggers": {
 		"crons": [
-			"0 * * * *",
+			"7 * * * *",
 			"0 */8 * * *"
 		]
 	}
