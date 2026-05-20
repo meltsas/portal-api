@@ -1,3 +1,4 @@
+// openMeteo.ts
 import type { DataSourceDefinition, DataSourceFetchResult } from '../types';
 
 /**
@@ -16,6 +17,20 @@ const TIMEZONE = 'Europe/Madrid';
 // Hourly cron + a 30-minute grace window. Tells consumers when this data is
 // considered "expected to be refreshed by".
 const EXPIRES_IN_MS = (60 + 30) * 60 * 1000;
+
+const OPEN_METEO_CURRENT_VARIABLES = [
+	'temperature_2m',
+	'apparent_temperature',
+	'relative_humidity_2m',
+	'wind_speed_10m',
+	'wind_gusts_10m',
+	'wind_direction_10m',
+	'precipitation',
+	'cloud_cover',
+	'weather_code',
+	'uv_index',
+	'is_day',
+];
 
 interface WeatherLocationConfig {
 	locationName: string;
@@ -85,7 +100,7 @@ export interface WorkerWeatherSnapshot {
 	locations: WorkerWeatherLocation[];
 }
 
-interface OpenMeteoCurrentResponse {
+interface OpenMeteoCurrentResponseItem {
 	latitude?: number;
 	longitude?: number;
 	timezone?: string;
@@ -107,6 +122,12 @@ interface OpenMeteoCurrentResponse {
 	};
 }
 
+// Single-location response is an object.
+// Multi-location response is an array of objects.
+type OpenMeteoCurrentResponse =
+	| OpenMeteoCurrentResponseItem
+	| OpenMeteoCurrentResponseItem[];
+
 export const openMeteoWeatherDataSource: DataSourceDefinition = {
 	id: 'weather_current_costa_blanca',
 	provider: 'open-meteo',
@@ -114,9 +135,7 @@ export const openMeteoWeatherDataSource: DataSourceDefinition = {
 		const fetchedAtIso = new Date().toISOString();
 		const expiresAtIso = new Date(Date.now() + EXPIRES_IN_MS).toISOString();
 
-		const locations = await Promise.all(
-			LOCATIONS.map((cfg) => fetchOpenMeteoForLocation(cfg, signal)),
-		);
+		const locations = await fetchOpenMeteoForLocations(LOCATIONS, signal);
 
 		const payload: WorkerWeatherSnapshot = {
 			sourceId: 'weather_current_costa_blanca',
@@ -130,47 +149,69 @@ export const openMeteoWeatherDataSource: DataSourceDefinition = {
 	},
 };
 
-async function fetchOpenMeteoForLocation(
-	cfg: WeatherLocationConfig,
+async function fetchOpenMeteoForLocations(
+	configs: WeatherLocationConfig[],
 	parentSignal?: AbortSignal,
-): Promise<WorkerWeatherLocation> {
-	const url = new URL('https://api.open-meteo.com/v1/forecast');
-	url.searchParams.set('latitude', String(cfg.latitude));
-	url.searchParams.set('longitude', String(cfg.longitude));
-	url.searchParams.set(
-		'current',
-		[
-			'temperature_2m',
-			'apparent_temperature',
-			'relative_humidity_2m',
-			'wind_speed_10m',
-			'wind_gusts_10m',
-			'wind_direction_10m',
-			'precipitation',
-			'cloud_cover',
-			'weather_code',
-			'uv_index',
-			'is_day',
-		].join(','),
-	);
-	url.searchParams.set('timezone', TIMEZONE);
-	url.searchParams.set('windspeed_unit', 'ms');
+): Promise<WorkerWeatherLocation[]> {
+	if (configs.length === 0) {
+		return [];
+	}
 
+	const url = createOpenMeteoMultiLocationUrl(configs);
 	const signal = combineSignals(parentSignal, AbortSignal.timeout(FETCH_TIMEOUT_MS));
 
 	const res = await fetch(url.toString(), { signal });
+
 	if (!res.ok) {
-		throw new Error(`Open-Meteo request for ${cfg.locationName} failed: ${res.status} ${res.statusText}`);
+		throw new Error(`Open-Meteo multi-location request failed: ${res.status} ${res.statusText}`);
 	}
 
 	const data = (await res.json()) as OpenMeteoCurrentResponse;
+	const responseItems = Array.isArray(data) ? data : [data];
 
+	if (responseItems.length !== configs.length) {
+		throw new Error(
+			`Open-Meteo multi-location response count mismatch: expected ${configs.length}, got ${responseItems.length}`,
+		);
+	}
+
+	return responseItems.map((item, index) => mapOpenMeteoItemToWorkerLocation(configs[index], item));
+}
+
+function createOpenMeteoMultiLocationUrl(configs: WeatherLocationConfig[]): URL {
+	const url = new URL('https://api.open-meteo.com/v1/forecast');
+
+	url.searchParams.set(
+		'latitude',
+		configs.map((cfg) => String(cfg.latitude)).join(','),
+	);
+
+	url.searchParams.set(
+		'longitude',
+		configs.map((cfg) => String(cfg.longitude)).join(','),
+	);
+
+	url.searchParams.set('current', OPEN_METEO_CURRENT_VARIABLES.join(','));
+	url.searchParams.set('timezone', TIMEZONE);
+
+	// Documented Open-Meteo parameter name.
+	// Previous implementation used `windspeed_unit`; this uses `wind_speed_unit`.
+	url.searchParams.set('wind_speed_unit', 'ms');
+
+	return url;
+}
+
+function mapOpenMeteoItemToWorkerLocation(
+	cfg: WeatherLocationConfig,
+	data: OpenMeteoCurrentResponseItem,
+): WorkerWeatherLocation {
 	// Minimal shape validation. Open-Meteo occasionally returns partials when
 	// the upstream weather model is updating — we'd rather record a `failed`
 	// snapshot than persist a broken payload that the SSG would render.
 	if (!data.current || typeof data.current.time !== 'string' || typeof data.current.interval !== 'number') {
 		throw new Error(`Open-Meteo response missing "current" data for ${cfg.locationName}`);
 	}
+
 	if (typeof data.current.temperature_2m !== 'number' || !Number.isFinite(data.current.temperature_2m)) {
 		throw new Error(`Open-Meteo missing numeric temperature_2m for ${cfg.locationName}`);
 	}
@@ -214,9 +255,11 @@ function numOrUndefined(v: unknown): number | undefined {
 
 function combineSignals(a: AbortSignal | undefined, b: AbortSignal): AbortSignal {
 	if (!a) return b;
+
 	// AbortSignal.any is available in modern Workers runtimes.
 	if (typeof AbortSignal.any === 'function') {
 		return AbortSignal.any([a, b]);
 	}
+
 	return b;
 }
