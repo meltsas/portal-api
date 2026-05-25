@@ -41,12 +41,6 @@ interface WeatherLocationConfig {
 
 const LOCATIONS: WeatherLocationConfig[] = [
 	{
-		locationName: 'Cartagena',
-		latitude: 37.6257,
-		longitude: -0.9966,
-		yrDailyTableLink: 'https://www.yr.no/en/forecast/daily-table/2-2520058/Spain/Murcia/Murcia/Cartagena',
-	},
-	{
 		locationName: 'Playa Flamenca',
 		latitude: 37.9431,
 		longitude: -0.7217,
@@ -63,6 +57,12 @@ const LOCATIONS: WeatherLocationConfig[] = [
 		latitude: 38.6446,
 		longitude: 0.0457,
 		yrDailyTableLink: 'https://www.yr.no/en/forecast/daily-table/2-2520496/Spain/Valencia/Alicante/Calpe',
+	},
+	{
+		locationName: 'Cartagena',
+		latitude: 37.6257,
+		longitude: -0.9966,
+		yrDailyTableLink: 'https://www.yr.no/en/forecast/daily-table/2-2520058/Spain/Murcia/Murcia/Cartagena',
 	},
 ];
 
