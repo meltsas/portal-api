@@ -1,5 +1,6 @@
 import type { DataSourceDefinition } from './types';
 import { openMeteoWeatherDataSource } from './dataSources/openMeteo';
+import { openMeteoMarineDataSource } from './dataSources/openMeteoMarine';
 
 /**
  * Code-side registry of all known scheduled data sources.
@@ -10,4 +11,7 @@ import { openMeteoWeatherDataSource } from './dataSources/openMeteo';
  * fetch cron iterates over this list and only runs sources whose D1 row
  * has `is_active = 1`.
  */
-export const DATA_SOURCES: DataSourceDefinition[] = [openMeteoWeatherDataSource];
+export const DATA_SOURCES: DataSourceDefinition[] = [
+	openMeteoWeatherDataSource,
+	openMeteoMarineDataSource,
+];

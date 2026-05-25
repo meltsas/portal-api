@@ -690,14 +690,26 @@ konstantidega — `scheduled()` käsitleja dispetšerdab `controller.cron` järg
 
 Hetkel registreeritud cron-id:
 
-- `0 * * * *` — tunnine välisandmete fetch (Open-Meteo current weather jne).
-  Iga `external_data_sources` rida, mille `is_active = 1`, fetchitakse,
-  hash arvutatakse ning kui see erineb `latest_data_hash`-ist, salvestatakse
-  uus `success` snapshot ning uuendatakse `latest_*` viidad. Sama hash =
-  kerge `skipped` snapshot. Vea korral `failed` snapshot, viidad jäävad
-  puutumata.
+- `7 * * * *` — tunnine välisandmete fetch (Open-Meteo current weather +
+  current marine/sea-conditions). Iga `external_data_sources` rida, mille
+  `is_active = 1`, fetchitakse, hash arvutatakse ning kui see erineb
+  `latest_data_hash`-ist, salvestatakse uus `success` snapshot ning
+  uuendatakse `latest_*` viidad. Sama hash = kerge `skipped` snapshot.
+  Vea korral `failed` snapshot, viidad jäävad puutumata.
 - `0 */8 * * *` — placeholder tulevasele GitHub export/commit cron-ile
   (`runGithubExportPlaceholder`). Hetkel ainult logib.
+
+Registreeritud andmeallikad:
+
+- `weather_current_costa_blanca` (`openMeteo.ts`) — Open-Meteo Forecast API
+  current-shape weather neljas asukohas. Üks API-päring per cron-tick.
+  Iga puuduolev väli loetakse normalisatsioonis veaks → `failed` snapshot.
+- `marine_current_costa_blanca` (`openMeteoMarine.ts`) — Open-Meteo Marine
+  API + Forecast API neljas rannas. Kaks paralleelset API-päringut
+  (`Promise.allSettled`). Marine on primaarne (viga → `failed` snapshot),
+  Forecast on sekundaarne (viga → `success` snapshot kus iga ranna
+  `weather` ja `wind` on `null` ja `isPartial = true`). See vastab SSG
+  `shared/marine-info/normalizeMarineInfo.ts` käitumisele.
 
 ### Uue välise andmeallika lisamine
 

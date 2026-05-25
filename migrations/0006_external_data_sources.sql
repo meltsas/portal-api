@@ -77,7 +77,7 @@ INSERT INTO external_data_sources (
     'Current weather for Costa Blanca / nearby locations',
     1,
     1,
-    'src/data/weather/current.json',
+    'src/data/weather/open-meteo-responses.json',
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 )
