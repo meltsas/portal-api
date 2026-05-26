@@ -696,8 +696,16 @@ Hetkel registreeritud cron-id:
   `latest_data_hash`-ist, salvestatakse uus `success` snapshot ning
   uuendatakse `latest_*` viidad. Sama hash = kerge `skipped` snapshot.
   Vea korral `failed` snapshot, viidad jäävad puutumata.
-- `0 */8 * * *` — placeholder tulevasele GitHub export/commit cron-ile
-  (`runGithubExportPlaceholder`). Hetkel ainult logib.
+- `9 * * * *` — smart GitHub export placeholder
+  (`runSmartGithubExportPlaceholder`). Cron tab UTC järgi (Cloudflare default)
+  iga tunni :09 minutil. Käsitleja loeb hetke kella `Europe/Madrid`
+  ajavööndis ja kontrollib, kas see kuulub lubatud publish-aknasse. Lubatud
+  kellaajad (Madridi aja järgi): `05:09, 07:09, 09:09, 11:09, 13:09, 15:09,
+  17:09, 19:09, 21:09` (±2 min cron-skew tolerants). 24 tunnisest fire-st
+  ~9 läbib akna kontrolli ja jätkab publish-tingimuste hindamist; ülejäänud
+  ~15 logivad selge skip-põhjuse. Hourly fire (mitte iga 2h tagant) hoiab
+  akna joondatuna nii suve- kui talveajas. Akna sees logitakse tulevaste
+  publish-tingimuste nimekiri — päris GitHub commit on veel välja lülitatud.
 
 Registreeritud andmeallikad:
 

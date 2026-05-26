@@ -5,10 +5,10 @@ import { publicRoutes } from './routes/public';
 import { authRoutes } from './routes/auth';
 import { adminRoutes } from './routes/admin';
 import {
-	CRON_GITHUB_EXPORT_PLACEHOLDER,
 	CRON_HOURLY_FETCH,
-	runGithubExportPlaceholder,
+	CRON_SMART_GITHUB_EXPORT,
 	runHourlyFetch,
+	runSmartGithubExportPlaceholder,
 } from './scheduled/handlers';
 
 const router = createRouter([...publicRoutes, ...authRoutes, ...adminRoutes], {
@@ -26,8 +26,8 @@ export default {
 			case CRON_HOURLY_FETCH:
 				ctx.waitUntil(runHourlyFetch(env));
 				return;
-			case CRON_GITHUB_EXPORT_PLACEHOLDER:
-				ctx.waitUntil(runGithubExportPlaceholder(env));
+			case CRON_SMART_GITHUB_EXPORT:
+				ctx.waitUntil(runSmartGithubExportPlaceholder(env));
 				return;
 			default:
 				console.warn(`[scheduled] unhandled cron expression: ${controller.cron}`);
