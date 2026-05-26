@@ -22,7 +22,7 @@
 		"GITHUB_REPO": "meltsas/non-touristic-rentals",
 		"GITHUB_EXPORT_ENABLED": true,
 		"GITHUB_EXPORT_DRY_RUN": false,
-		"GITHUB_BRANCH": "data-export-test",
+		"GITHUB_BRANCH": "master",
 		"GITHUB_COMMITTER_NAME": "Portal Data Bot",
 		"GITHUB_COMMITTER_EMAIL": "portal-data-bot@gmail.com",
 		"GITHUB_WEATHER_FILE_PATH": "app/data/weather/open-meteo-responses.json",
