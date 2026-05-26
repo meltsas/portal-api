@@ -1,5 +1,6 @@
 import { DATA_SOURCES } from './registry';
 import { runDataSourceFetch } from './runFetch';
+import { runGithubExport } from './githubExport';
 
 /**
  * Cron entry points. Wired up from `src/index.ts` and matched on
@@ -38,56 +39,82 @@ export async function runHourlyFetch(env: Env): Promise<void> {
 }
 
 /**
- * Hourly cron placeholder for the smart GitHub export.
+ * Hourly cron entry point for the smart GitHub export.
  *
- * Cron fires every hour at :09 (UTC). The handler then evaluates whether the
- * current `Europe/Madrid` clock time falls inside the allowed publish window
+ * Cron fires every hour at :09 (UTC). The handler first checks the current
+ * `Europe/Madrid` clock time against the allowed publish window
  * (`ALLOWED_PUBLISH_HOURS` at minute `PUBLISH_WINDOW_MINUTE`). Firing every
  * hour (rather than every 2 hours) keeps the publish window aligned with
  * Madrid clock-time across DST: 9 of the 24 daily firings land inside the
  * window in both winter and summer, the other 15 log a clean skip.
  *
- * If outside the window, the handler logs a clean skip and returns. If
- * inside, it logs the future publish conditions it will eventually check,
- * but does NOT call the GitHub API or write to D1.
- *
- * The real GitHub commit logic will be added in the next step. Intended flow
- * once implemented:
- *   1. Select rows from `external_data_sources` where publish_to_github = 1
- *      and the latest snapshot's data hash differs from the last published
- *      commit's hash (i.e. there is actually something new to push).
- *   2. Verify the previous publish wasn't too recent (rate-limit guard).
- *   3. For each, read `external_data_snapshots.normalized_json` for
- *      `latest_snapshot_id` and PUT it to `github_file_path` in the SSG repo
- *      via the GitHub Contents API.
- *   4. On success, update `latest_published_commit_sha` on the source row
- *      and `published_commit_sha` on the snapshot row.
+ * If outside the window, the handler logs and returns. If inside, it
+ * delegates to `runGithubExport`, which loads the latest weather + marine
+ * snapshots from D1, computes a composite hash, and (when enabled and not
+ * in dry-run) commits both files to the target branch via the GitHub Git
+ * Database API.
  */
-export async function runSmartGithubExportPlaceholder(_env: Env): Promise<void> {
-	console.log('[scheduled] smart-github-export placeholder cron fired.');
+export async function runSmartGithubExport(env: Env): Promise<void> {
+	console.log('[scheduled] smart-github-export cron fired.');
 
 	const clock = nowInPublishTimezone();
 	const clockIso = `${pad2(clock.hour)}:${pad2(clock.minute)}`;
 	console.log(`[scheduled] smart-github-export current ${PUBLISH_WINDOW_TIMEZONE} time: ${clockIso}`);
 
 	if (!isInPublishWindow(clock)) {
-		const allowed = ALLOWED_PUBLISH_HOURS.map((h) => `${pad2(h)}:${pad2(PUBLISH_WINDOW_MINUTE)}`).join(', ');
-		console.log(
-			`[scheduled] smart-github-export skipped — ${clockIso} ${PUBLISH_WINDOW_TIMEZONE} is outside ` +
-			`the allowed publish window (${allowed}, ±${PUBLISH_WINDOW_MINUTE_TOLERANCE}min tolerance).`,
-		);
-		return;
+		if (shouldBypassGithubExportWindowForDev(env)) {
+			console.log(
+				'[scheduled] smart github export dev override: bypassing publish window because ' +
+					'ENVIRONMENT=development and GITHUB_EXPORT_DRY_RUN=true',
+			);
+			// Fall through to runGithubExport. The export still respects its own
+			// internal `dry_run` decision, so this is safe — no GitHub call will
+			// happen while DRY_RUN is true.
+		} else {
+			if (isDevelopmentEnv(env)) {
+				console.log(
+					'[scheduled] smart-github-export dev override NOT applied — ' +
+						'GITHUB_EXPORT_DRY_RUN is not true. Falling through to normal skip.',
+				);
+			}
+			const allowed = ALLOWED_PUBLISH_HOURS.map((h) => `${pad2(h)}:${pad2(PUBLISH_WINDOW_MINUTE)}`).join(', ');
+			console.log(
+				`[scheduled] smart-github-export skipped — ${clockIso} ${PUBLISH_WINDOW_TIMEZONE} is outside ` +
+					`the allowed publish window (${allowed}, ±${PUBLISH_WINDOW_MINUTE_TOLERANCE}min tolerance).`,
+			);
+			return;
+		}
 	}
 
-	// Inside the window. Real conditions will be evaluated here in the next step.
-	console.log('[scheduled] smart-github-export inside publish window — placeholder evaluating future conditions:');
-	console.log('  [ ] export enabled globally (TODO: read from config / env)');
-	console.log('  [x] current time is allowed');
-	console.log('  [ ] normalized data exists for both weather and marine sources');
-	console.log('  [ ] data hash changed since last published export');
-	console.log('  [ ] previous publish was not too recent (rate-limit guard)');
-	console.log('  [ ] GitHub target file paths are configured for each source');
-	console.log('[scheduled] smart-github-export real GitHub commit is still disabled — no-op.');
+	try {
+		const result = await runGithubExport(env);
+		console.log(`[scheduled] smart-github-export result: ${result.status}`);
+	} catch (err) {
+		// runGithubExport handles its own per-attempt persistence; this catch
+		// only covers unexpected failures (e.g. D1 outage during state writes).
+		const message = err instanceof Error ? err.message : String(err);
+		console.error(`[scheduled] smart-github-export unexpected error: ${message}`);
+	}
+}
+
+/**
+ * Dev-only override that lets the smart GitHub export handler continue past
+ * the Madrid publish-window guard when running locally in dry-run.
+ *
+ * Production safety: the override is gated on BOTH `ENVIRONMENT==='development'`
+ * AND `GITHUB_EXPORT_DRY_RUN===true`. `ENVIRONMENT` is set to `production` in
+ * `wrangler.jsonc` for deployed Workers; `development` only comes from
+ * `.dev.vars` during `wrangler dev`. The `DRY_RUN` clause guarantees that even
+ * a misconfigured local env can never make a real GitHub commit outside the
+ * normal publish window.
+ */
+export function shouldBypassGithubExportWindowForDev(env: Env): boolean {
+	const e = env as unknown as Record<string, unknown>;
+	return e.ENVIRONMENT === 'development' && e.GITHUB_EXPORT_DRY_RUN === true;
+}
+
+function isDevelopmentEnv(env: Env): boolean {
+	return (env as unknown as Record<string, unknown>).ENVIRONMENT === 'development';
 }
 
 // ─── Publish-window helpers ──────────────────────────────────────────────────

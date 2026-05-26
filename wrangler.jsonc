@@ -17,7 +17,16 @@
 	"vars": {
 		"ENVIRONMENT": "production",
 		"GOOGLE_CLIENT_ID": "296921667290-ppud7lh91ojm5ujosof5394t13o7jtv2.apps.googleusercontent.com",
-		"SESSION_SECRET": "8892992383feeara-67fe9d-84f5-436f-iekdj-85370c179a3a-xbaftazbaxxxc5644932356"
+		"SESSION_SECRET": "8892992383feeara-67fe9d-84f5-436f-iekdj-85370c179a3a-xbaftazbaxxxc5644932356",
+
+		"GITHUB_REPO": "meltsas/non-touristic-rentals",
+		"GITHUB_EXPORT_ENABLED": true,
+		"GITHUB_EXPORT_DRY_RUN": false,
+		"GITHUB_BRANCH": "data-export-test",
+		"GITHUB_COMMITTER_NAME": "Portal Data Bot",
+		"GITHUB_COMMITTER_EMAIL": "portal-data-bot@gmail.com",
+		"GITHUB_WEATHER_FILE_PATH": "app/data/weather/open-meteo-responses.json",
+		"GITHUB_MARINE_FILE_PATH": "app/data/marine/open-meteo-responses.json"
 	},
 	"observability": {
 		"enabled": true

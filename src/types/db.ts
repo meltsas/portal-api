@@ -121,3 +121,17 @@ export interface ExternalDataSnapshotRow {
 	published_commit_sha: string | null;
 	created_at: string;
 }
+
+export interface GithubExportStateRow {
+	id: string;
+	repo: string;
+	branch: string;
+	latest_export_hash: string | null;
+	latest_commit_sha: string | null;
+	latest_exported_at: string | null;
+	last_attempt_at: string | null;
+	last_status: string | null;
+	last_error: string | null;
+	created_at: string;
+	updated_at: string;
+}

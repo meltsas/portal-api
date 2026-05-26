@@ -696,16 +696,15 @@ Hetkel registreeritud cron-id:
   `latest_data_hash`-ist, salvestatakse uus `success` snapshot ning
   uuendatakse `latest_*` viidad. Sama hash = kerge `skipped` snapshot.
   Vea korral `failed` snapshot, viidad jäävad puutumata.
-- `9 * * * *` — smart GitHub export placeholder
-  (`runSmartGithubExportPlaceholder`). Cron tab UTC järgi (Cloudflare default)
-  iga tunni :09 minutil. Käsitleja loeb hetke kella `Europe/Madrid`
-  ajavööndis ja kontrollib, kas see kuulub lubatud publish-aknasse. Lubatud
-  kellaajad (Madridi aja järgi): `05:09, 07:09, 09:09, 11:09, 13:09, 15:09,
-  17:09, 19:09, 21:09` (±2 min cron-skew tolerants). 24 tunnisest fire-st
-  ~9 läbib akna kontrolli ja jätkab publish-tingimuste hindamist; ülejäänud
-  ~15 logivad selge skip-põhjuse. Hourly fire (mitte iga 2h tagant) hoiab
-  akna joondatuna nii suve- kui talveajas. Akna sees logitakse tulevaste
-  publish-tingimuste nimekiri — päris GitHub commit on veel välja lülitatud.
+- `9 * * * *` — smart GitHub export (`runSmartGithubExport`). Cron tab UTC
+  järgi (Cloudflare default) iga tunni :09 minutil. Käsitleja loeb hetke
+  kella `Europe/Madrid` ajavööndis ja kontrollib, kas see kuulub lubatud
+  publish-aknasse. Lubatud kellaajad (Madridi aja järgi): `05:09, 07:09,
+  09:09, 11:09, 13:09, 15:09, 17:09, 19:09, 21:09` (±2 min cron-skew
+  tolerants). 24 tunnisest fire-st ~9 läbib akna kontrolli ja delegeerib
+  edasi `runGithubExport`-ile (`src/scheduled/githubExport.ts`); ülejäänud
+  ~15 logivad selge skip-põhjuse. Hourly fire hoiab akna joondatuna nii
+  suve- kui talveajas.
 
 Registreeritud andmeallikad:
 
@@ -718,6 +717,59 @@ Registreeritud andmeallikad:
   Forecast on sekundaarne (viga → `success` snapshot kus iga ranna
   `weather` ja `wind` on `null` ja `isPartial = true`). See vastab SSG
   `shared/marine-info/normalizeMarineInfo.ts` käitumisele.
+
+### Smart GitHub export
+
+`runGithubExport` ehitab kahe failiga (weather + marine) ühe Git-commiti
+SSG repo siht-branchile, kasutades GitHub Git Database API-d natiivse
+`fetch`-iga (ei mingit Octokitit ega välist sõltuvust). Voog:
+
+1. Laeb mõlema allika viimase `success` snapshoti (`latest_snapshot_id`
+   viit `external_data_sources` real → `external_data_snapshots` rida).
+2. Parsib mõlema `normalized_json`.
+3. Arvutab stabiilse komposiit-hashi (sorted-keys, koos sihtfailipathidega
+   ja versioonimärgendiga).
+4. Hindab `evaluatePublishConditions`-ga, kas commitida, dry-runnida või
+   skipida — kõik puhas funktsioon, sõltumatu D1-st ja võrgust.
+5. `commit` korral: GET branch ref → GET parent commit → POST tree
+   (kahe blobiga, base_tree=parent tree) → POST commit → PATCH ref.
+6. Edu korral uuendab `github_export_state` rida (hash, commit_sha,
+   timestamp). Vea korral uuendab `last_attempt_at` / `last_status` /
+   `last_error`, kuid jätab `latest_*` puutumata.
+
+Olulised env-väärtused (`wrangler.jsonc` vars + secrets):
+
+- `GITHUB_TOKEN` (secret, läbi `wrangler secret put GITHUB_TOKEN`).
+- `GITHUB_REPO`, näide: `meltsas/non-touristic-rentals`.
+- `GITHUB_EXPORT_ENABLED`: `boolean` (default — käitle puuduolevana =
+  `false`). Master switch.
+- `GITHUB_EXPORT_DRY_RUN`: `boolean` (default — käitle puuduolevana =
+  `true`). Kui `true`, kõik kontrollid läbivad aga GitHub API-d ei
+  kutsuta.
+- `GITHUB_BRANCH`, `GITHUB_WEATHER_FILE_PATH`, `GITHUB_MARINE_FILE_PATH`.
+- `GITHUB_COMMITTER_NAME`, `GITHUB_COMMITTER_EMAIL`.
+
+Kombinatsioonid:
+
+- `enabled=false`: alati skip (`disabled`), olenemata dry-run-ist.
+- `enabled=true, dryRun=true`: kõik kontrollid, log "would commit",
+  GitHub-i ei puudutata.
+- `enabled=true, dryRun=false`: kui kõik tingimused passivad → päris
+  commit ja D1 state uuendamine.
+
+Kontrollid (`evaluatePublishConditions` järjekorras):
+
+1. `GITHUB_REPO` parseb `owner/repo`-ks.
+2. `GITHUB_BRANCH` olemas.
+3. Mõlemad failipathid konfigureeritud.
+4. Mõlemad snapshotid leitud D1-st.
+5. Mõlemad `normalized_json` parsuvad.
+6. Komposiit-hash erineb varasemast (`unchanged` -> skip).
+7. Eelmine edukas export pole liiga värske (`MIN_EXPORT_INTERVAL_MS =
+   30min` vaikimisi).
+8. `enabled === true`.
+9. Kui `dryRun === true` → dry_run; muidu `GITHUB_TOKEN` olemas.
+10. Päris commit.
 
 ### Uue välise andmeallika lisamine
 
