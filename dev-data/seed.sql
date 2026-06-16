@@ -9,6 +9,8 @@ DELETE FROM generation_runs;
 DELETE FROM blog_post_images;
 DELETE FROM blog_posts;
 DELETE FROM blog_topics;
+DELETE FROM bookings;
+DELETE FROM customers;
 DELETE FROM leads;
 DELETE FROM offer_availability;
 DELETE FROM offers;
@@ -368,4 +370,66 @@ INSERT INTO admin_audit_logs (
           'lead_001',
           'Inserted example lead',
           '{"source":"seed.sql"}'
+      );
+
+-- =========================================================
+-- BOOKINGS
+-- Source of truth for the public booked-dates export. Only `confirmed`
+-- bookings whose checkout is today or later are exported (see
+-- src/scheduled/bookedDatesExport.ts). The two confirmed future rows below
+-- mirror the hand-seeded website JSON
+-- (non-touristic-rentals/app/data/offers/booked-dates/*.json) so a local
+-- export cron round-trips to the same data. The tentative and past-confirmed
+-- rows exist to verify the export filters exclude them.
+-- =========================================================
+
+INSERT INTO bookings (
+    id,
+    offer_id,
+    customer_id,
+    booking_type,
+    status,
+    date_from,
+    date_to,
+    title
+) VALUES
+      (
+          'booking_001',
+          'offer_001',
+          NULL,
+          'customer_stay',
+          'confirmed',
+          '2026-06-27',
+          '2026-07-13',
+          'Confirmed summer stay (exported)'
+      ),
+      (
+          'booking_002',
+          'offer_001',
+          NULL,
+          'customer_stay',
+          'confirmed',
+          '2026-09-19',
+          '2026-11-07',
+          'Confirmed autumn stay (exported)'
+      ),
+      (
+          'booking_003',
+          'offer_001',
+          NULL,
+          'customer_stay',
+          'tentative',
+          '2026-12-01',
+          '2026-12-20',
+          'Tentative hold (NOT exported — only confirmed blocks the calendar)'
+      ),
+      (
+          'booking_004',
+          'offer_001',
+          NULL,
+          'customer_stay',
+          'confirmed',
+          '2026-05-01',
+          '2026-05-20',
+          'Past confirmed stay (NOT exported — checkout is before today)'
       );

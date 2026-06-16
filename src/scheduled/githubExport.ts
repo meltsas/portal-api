@@ -1,6 +1,7 @@
 import type { ExternalDataSnapshotRow, GithubExportStateRow } from '../types/db';
 import { createGithubClient, parseRepo, type GithubClient } from '../github/githubClient';
 import { stableHash } from './hash';
+import { loadBookedDatesByOffer, type BookedDatesByOffer } from './bookedDatesExport';
 
 /**
  * Smart GitHub export orchestrator.
@@ -22,13 +23,14 @@ const MARINE_SOURCE_ID = 'marine_current_costa_blanca';
 
 // Composite-hash version key — bump if the export shape changes so older
 // published hashes are treated as different from new ones.
-const COMPOSITE_HASH_VERSION = 'v1';
+// v2: added booked-dates file to the composite export.
+const COMPOSITE_HASH_VERSION = 'v2';
 
 // Don't re-publish more often than this even if data changed. Cheap
 // safety net against runaway re-commits.
 const MIN_EXPORT_INTERVAL_MS = 30 * 60 * 1000;
 
-const COMMIT_MESSAGE = 'Update weather and marine data';
+const COMMIT_MESSAGE = 'Update weather, marine and booked-dates data';
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -40,6 +42,7 @@ export interface GithubExportConfig {
 	branch: string;
 	weatherFilePath: string;
 	marineFilePath: string;
+	bookedDatesFilePath: string;
 	committerName: string;
 	committerEmail: string;
 }
@@ -80,6 +83,7 @@ export function readGithubExportConfig(env: Env): GithubExportConfig {
 		branch: typeof e.GITHUB_BRANCH === 'string' ? e.GITHUB_BRANCH : '',
 		weatherFilePath: typeof e.GITHUB_WEATHER_FILE_PATH === 'string' ? e.GITHUB_WEATHER_FILE_PATH : '',
 		marineFilePath: typeof e.GITHUB_MARINE_FILE_PATH === 'string' ? e.GITHUB_MARINE_FILE_PATH : '',
+		bookedDatesFilePath: typeof e.GITHUB_BOOKED_DATES_FILE_PATH === 'string' ? e.GITHUB_BOOKED_DATES_FILE_PATH : '',
 		committerName: typeof e.GITHUB_COMMITTER_NAME === 'string' && e.GITHUB_COMMITTER_NAME
 			? e.GITHUB_COMMITTER_NAME
 			: 'Portal Data Bot',
@@ -113,8 +117,10 @@ function sortKeysDeep(value: unknown): unknown {
 export interface CompositeHashInput {
 	weatherData: unknown;
 	marineData: unknown;
+	bookedDatesData: unknown;
 	weatherPath: string;
 	marinePath: string;
+	bookedDatesPath: string;
 }
 
 export async function computeCompositeHash(input: CompositeHashInput): Promise<string> {
@@ -122,6 +128,7 @@ export async function computeCompositeHash(input: CompositeHashInput): Promise<s
 		version: COMPOSITE_HASH_VERSION,
 		weather: { path: input.weatherPath, data: input.weatherData },
 		marine: { path: input.marinePath, data: input.marineData },
+		bookedDates: { path: input.bookedDatesPath, data: input.bookedDatesData },
 	});
 }
 
@@ -164,7 +171,7 @@ export function evaluatePublishConditions(input: ConditionInput): PublishDecisio
 
 	if (!parseRepo(cfg.repo)) return { action: 'skip', reason: 'invalid_repo' };
 	if (!cfg.branch) return { action: 'skip', reason: 'missing_branch' };
-	if (!cfg.weatherFilePath || !cfg.marineFilePath) {
+	if (!cfg.weatherFilePath || !cfg.marineFilePath || !cfg.bookedDatesFilePath) {
 		return { action: 'skip', reason: 'missing_file_paths' };
 	}
 
@@ -208,13 +215,21 @@ export async function runGithubExport(env: Env): Promise<ExportResult> {
 	const parsedWeather = tryParseJson(weatherSnapshot?.normalized_json ?? null);
 	const parsedMarine = tryParseJson(marineSnapshot?.normalized_json ?? null);
 
+	// Booked dates are derived live from D1 (not a snapshot), so there is no
+	// "missing snapshot" / "invalid JSON" failure mode — an empty result is a
+	// valid export (no offers currently have confirmed bookings).
+	const today = new Date().toISOString().slice(0, 10);
+	const bookedDates = await loadBookedDatesByOffer(env, today);
+
 	// Composite hash. Only meaningful when both JSONs parsed; otherwise we use
 	// empty placeholders so the decision step can reach its `invalid_*` branch.
 	const compositeHash = await computeCompositeHash({
 		weatherData: parsedWeather.ok ? parsedWeather.value : null,
 		marineData: parsedMarine.ok ? parsedMarine.value : null,
+		bookedDatesData: bookedDates,
 		weatherPath: config.weatherFilePath,
 		marinePath: config.marineFilePath,
+		bookedDatesPath: config.bookedDatesFilePath,
 	});
 
 	const priorState = await loadExportState(env, config.repo, config.branch);
@@ -239,7 +254,8 @@ export async function runGithubExport(env: Env): Promise<ExportResult> {
 		log(
 			'log',
 			`dry-run — would commit hash ${compositeHash.slice(0, 12)}… to ${config.repo}@${config.branch} ` +
-				`(${config.weatherFilePath}, ${config.marineFilePath}). GITHUB_EXPORT_DRY_RUN=true, no GitHub calls made.`,
+				`(${config.weatherFilePath}, ${config.marineFilePath}, ${config.bookedDatesFilePath}). ` +
+				`GITHUB_EXPORT_DRY_RUN=true, no GitHub calls made.`,
 		);
 		return { status: 'dry_run', compositeHash };
 	}
@@ -265,12 +281,14 @@ export async function runGithubExport(env: Env): Promise<ExportResult> {
 	});
 
 	try {
-		const commitSha = await commitBothFiles(client, {
+		const commitSha = await commitDataFiles(client, {
 			branch: config.branch,
 			weatherFilePath: config.weatherFilePath,
 			marineFilePath: config.marineFilePath,
+			bookedDatesFilePath: config.bookedDatesFilePath,
 			weatherContent: formatStableJson(parsedWeather.ok ? parsedWeather.value : null),
 			marineContent: formatStableJson(parsedMarine.ok ? parsedMarine.value : null),
+			bookedDatesContent: formatStableJson(bookedDates),
 			committer: { name: config.committerName, email: config.committerEmail },
 			message: COMMIT_MESSAGE,
 		});
@@ -292,22 +310,25 @@ export async function runGithubExport(env: Env): Promise<ExportResult> {
 
 // ─── GitHub commit composition ───────────────────────────────────────────────
 
-interface CommitBothFilesInput {
+interface CommitDataFilesInput {
 	branch: string;
 	weatherFilePath: string;
 	marineFilePath: string;
+	bookedDatesFilePath: string;
 	weatherContent: string;
 	marineContent: string;
+	bookedDatesContent: string;
 	committer: { name: string; email: string };
 	message: string;
 }
 
-async function commitBothFiles(client: GithubClient, input: CommitBothFilesInput): Promise<string> {
+async function commitDataFiles(client: GithubClient, input: CommitDataFilesInput): Promise<string> {
 	const head = await client.getBranchHead(input.branch);
 	const parentCommit = await client.getCommit(head.commitSha);
 	const tree = await client.createTree(parentCommit.treeSha, [
 		{ path: input.weatherFilePath, content: input.weatherContent },
 		{ path: input.marineFilePath, content: input.marineContent },
+		{ path: input.bookedDatesFilePath, content: input.bookedDatesContent },
 	]);
 	const newCommit = await client.createCommit({
 		message: input.message,
@@ -424,7 +445,8 @@ function skipMessage(reason: SkipReason, ctx: SkipContext): string {
 		case 'missing_branch':
 			return `${tag} — GITHUB_BRANCH not configured.`;
 		case 'missing_file_paths':
-			return `${tag} — GITHUB_WEATHER_FILE_PATH or GITHUB_MARINE_FILE_PATH not configured.`;
+			return `${tag} — GITHUB_WEATHER_FILE_PATH, GITHUB_MARINE_FILE_PATH or ` +
+				`GITHUB_BOOKED_DATES_FILE_PATH not configured.`;
 		case 'missing_weather_snapshot':
 			return `${tag} — no successful snapshot found for source ${WEATHER_SOURCE_ID}.`;
 		case 'missing_marine_snapshot':

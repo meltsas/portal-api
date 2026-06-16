@@ -26,7 +26,8 @@
 		"GITHUB_COMMITTER_NAME": "Portal Data Bot",
 		"GITHUB_COMMITTER_EMAIL": "portal-data-bot@gmail.com",
 		"GITHUB_WEATHER_FILE_PATH": "app/data/weather/open-meteo-responses.json",
-		"GITHUB_MARINE_FILE_PATH": "app/data/marine/open-meteo-responses.json"
+		"GITHUB_MARINE_FILE_PATH": "app/data/marine/open-meteo-responses.json",
+		"GITHUB_BOOKED_DATES_FILE_PATH": "app/data/offers/booked-dates/costa-blanca-booked-dates.json"
 	},
 	"observability": {
 		"enabled": true

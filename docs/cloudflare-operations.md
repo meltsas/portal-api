@@ -720,22 +720,33 @@ Registreeritud andmeallikad:
 
 ### Smart GitHub export
 
-`runGithubExport` ehitab kahe failiga (weather + marine) ühe Git-commiti
-SSG repo siht-branchile, kasutades GitHub Git Database API-d natiivse
-`fetch`-iga (ei mingit Octokitit ega välist sõltuvust). Voog:
+`runGithubExport` ehitab kolme failiga (weather + marine + booked-dates)
+ühe Git-commiti SSG repo siht-branchile, kasutades GitHub Git Database
+API-d natiivse `fetch`-iga (ei mingit Octokitit ega välist sõltuvust). Voog:
 
-1. Laeb mõlema allika viimase `success` snapshoti (`latest_snapshot_id`
-   viit `external_data_sources` real → `external_data_snapshots` rida).
+1. Laeb weather + marine allika viimase `success` snapshoti
+   (`latest_snapshot_id` viit `external_data_sources` real →
+   `external_data_snapshots` rida).
 2. Parsib mõlema `normalized_json`.
-3. Arvutab stabiilse komposiit-hashi (sorted-keys, koos sihtfailipathidega
-   ja versioonimärgendiga).
-4. Hindab `evaluatePublishConditions`-ga, kas commitida, dry-runnida või
+3. Laeb booked-dates andmed otse D1 `bookings` tabelist
+   (`src/scheduled/bookedDatesExport.ts`): ainult `status = 'confirmed'`
+   ja `date_to >= today` read, grupeeritud offer id järgi kujule
+   `{ "offer_001": [{ from, to }, … ] }`. Erinevalt weather/marine-ist
+   pole siin "snapshot"-i ega välist API-t — tühi tulemus on kehtiv
+   eksport. Tentative broneeringud EI blokeeri avalikku kalendrit.
+4. Arvutab stabiilse komposiit-hashi (sorted-keys, kõigi kolme
+   sihtfailipathiga ja versioonimärgendiga, `COMPOSITE_HASH_VERSION`).
+5. Hindab `evaluatePublishConditions`-ga, kas commitida, dry-runnida või
    skipida — kõik puhas funktsioon, sõltumatu D1-st ja võrgust.
-5. `commit` korral: GET branch ref → GET parent commit → POST tree
-   (kahe blobiga, base_tree=parent tree) → POST commit → PATCH ref.
-6. Edu korral uuendab `github_export_state` rida (hash, commit_sha,
+6. `commit` korral: GET branch ref → GET parent commit → POST tree
+   (kolme blobiga, base_tree=parent tree) → POST commit → PATCH ref.
+7. Edu korral uuendab `github_export_state` rida (hash, commit_sha,
    timestamp). Vea korral uuendab `last_attempt_at` / `last_status` /
    `last_error`, kuid jätab `latest_*` puutumata.
+
+NB: kõik kolm faili on ühes commitis. Kui weather või marine snapshot
+puudub, skipitakse terve commit (ka booked-dates) — praegune teadlik
+kompromiss (üks atomaarne commit).
 
 Olulised env-väärtused (`wrangler.jsonc` vars + secrets):
 
@@ -746,7 +757,9 @@ Olulised env-väärtused (`wrangler.jsonc` vars + secrets):
 - `GITHUB_EXPORT_DRY_RUN`: `boolean` (default — käitle puuduolevana =
   `true`). Kui `true`, kõik kontrollid läbivad aga GitHub API-d ei
   kutsuta.
-- `GITHUB_BRANCH`, `GITHUB_WEATHER_FILE_PATH`, `GITHUB_MARINE_FILE_PATH`.
+- `GITHUB_BRANCH`, `GITHUB_WEATHER_FILE_PATH`, `GITHUB_MARINE_FILE_PATH`,
+  `GITHUB_BOOKED_DATES_FILE_PATH` (näide:
+  `app/data/offers/booked-dates/costa-blanca-booked-dates.json`).
 - `GITHUB_COMMITTER_NAME`, `GITHUB_COMMITTER_EMAIL`.
 
 Kombinatsioonid:
@@ -761,8 +774,8 @@ Kontrollid (`evaluatePublishConditions` järjekorras):
 
 1. `GITHUB_REPO` parseb `owner/repo`-ks.
 2. `GITHUB_BRANCH` olemas.
-3. Mõlemad failipathid konfigureeritud.
-4. Mõlemad snapshotid leitud D1-st.
+3. Kõik kolm failipathi konfigureeritud (weather, marine, booked-dates).
+4. Mõlemad (weather + marine) snapshotid leitud D1-st.
 5. Mõlemad `normalized_json` parsuvad.
 6. Komposiit-hash erineb varasemast (`unchanged` -> skip).
 7. Eelmine edukas export pole liiga värske (`MIN_EXPORT_INTERVAL_MS =

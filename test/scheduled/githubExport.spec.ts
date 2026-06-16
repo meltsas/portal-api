@@ -17,6 +17,7 @@ const baseConfig: GithubExportConfig = {
 	branch: 'data-export-test',
 	weatherFilePath: 'app/data/weather/open-meteo-responses.json',
 	marineFilePath: 'app/data/marine/open-meteo-responses.json',
+	bookedDatesFilePath: 'app/data/offers/booked-dates/costa-blanca-booked-dates.json',
 	committerName: 'Portal Data Bot',
 	committerEmail: 'portal-data-bot@example.com',
 };
@@ -126,66 +127,56 @@ describe('formatStableJson', () => {
 });
 
 describe('computeCompositeHash', () => {
+	const base = {
+		weatherData: { temp: 22 },
+		marineData: { wave: 0.3 },
+		bookedDatesData: { offer_001: [{ from: '2026-06-27', to: '2026-07-13' }] },
+		weatherPath: 'a',
+		marinePath: 'b',
+		bookedDatesPath: 'c',
+	};
+
 	it('produces the same hash for the same input', async () => {
-		const a = await computeCompositeHash({
-			weatherData: { temp: 22 },
-			marineData: { wave: 0.3 },
-			weatherPath: 'a',
-			marinePath: 'b',
-		});
-		const b = await computeCompositeHash({
-			weatherData: { temp: 22 },
-			marineData: { wave: 0.3 },
-			weatherPath: 'a',
-			marinePath: 'b',
-		});
-		expect(a).toBe(b);
+		expect(await computeCompositeHash({ ...base })).toBe(await computeCompositeHash({ ...base }));
 	});
 
 	it('changes when weather data changes', async () => {
-		const a = await computeCompositeHash({
-			weatherData: { temp: 22 },
-			marineData: { wave: 0.3 },
-			weatherPath: 'a',
-			marinePath: 'b',
-		});
+		const a = await computeCompositeHash({ ...base });
+		const b = await computeCompositeHash({ ...base, weatherData: { temp: 23 } });
+		expect(a).not.toBe(b);
+	});
+
+	it('changes when booked-dates data changes', async () => {
+		const a = await computeCompositeHash({ ...base });
 		const b = await computeCompositeHash({
-			weatherData: { temp: 23 },
-			marineData: { wave: 0.3 },
-			weatherPath: 'a',
-			marinePath: 'b',
+			...base,
+			bookedDatesData: { offer_001: [{ from: '2026-06-27', to: '2026-07-14' }] },
 		});
 		expect(a).not.toBe(b);
 	});
 
+	it('changes when the booked-dates file path changes', async () => {
+		const a = await computeCompositeHash({ ...base });
+		const b = await computeCompositeHash({ ...base, bookedDatesPath: 'other.json' });
+		expect(a).not.toBe(b);
+	});
+
 	it('changes when target file paths change', async () => {
-		const a = await computeCompositeHash({
-			weatherData: { temp: 22 },
-			marineData: { wave: 0.3 },
-			weatherPath: 'a',
-			marinePath: 'b',
-		});
-		const b = await computeCompositeHash({
-			weatherData: { temp: 22 },
-			marineData: { wave: 0.3 },
-			weatherPath: 'a',
-			marinePath: 'c',
-		});
+		const a = await computeCompositeHash({ ...base });
+		const b = await computeCompositeHash({ ...base, marinePath: 'c' });
 		expect(a).not.toBe(b);
 	});
 
 	it('is insensitive to key order in the inputs', async () => {
 		const a = await computeCompositeHash({
+			...base,
 			weatherData: { temp: 22, humidity: 50 },
 			marineData: { wave: 0.3, period: 4 },
-			weatherPath: 'a',
-			marinePath: 'b',
 		});
 		const b = await computeCompositeHash({
+			...base,
 			weatherData: { humidity: 50, temp: 22 },
 			marineData: { period: 4, wave: 0.3 },
-			weatherPath: 'a',
-			marinePath: 'b',
 		});
 		expect(a).toBe(b);
 	});
@@ -279,6 +270,14 @@ describe('evaluatePublishConditions', () => {
 			evaluatePublishConditions(
 				fullySuppliedInput({
 					config: { ...baseConfig, marineFilePath: '' },
+				}),
+			),
+		).toEqual({ action: 'skip', reason: 'missing_file_paths' });
+
+		expect(
+			evaluatePublishConditions(
+				fullySuppliedInput({
+					config: { ...baseConfig, bookedDatesFilePath: '' },
 				}),
 			),
 		).toEqual({ action: 'skip', reason: 'missing_file_paths' });
