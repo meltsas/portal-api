@@ -12,7 +12,8 @@ const ALLOWED_ORIGINS = [
 	'http://localhost:5174',
 	'http://localhost:5551',
 	'https://portal-api-admin-ui.pages.dev',
-	'https://costaseasons.pages.dev'
+	'https://costaseasons.pages.dev',
+	'https://costaseasons.com'
 ];
 
 const ALLOWED_METHODS = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
