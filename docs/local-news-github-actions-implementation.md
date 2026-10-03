@@ -1,6 +1,8 @@
 # Kohalike uudiste pipeline GitHub Actionsis: teostusplaan
 
-Staatus: S1 tehtud 2026-10-02 (workflow-fail ja README lõik on harus `local-news-gereration`), S2 ootab Martinit. Analüüs ja variantide võrdlus on failides
+Staatus: S1 tehtud 2026-10-02, S2 ja S3 tehtud 2026-10-03 (workflow on portal-api `master`-is; esimene
+käsitsi käivitus õnnestus: 11 mudelikõnet, $0.0122, pipeline'i samm 1 min 21 s, 21 kirjet, 3 tagasilükkamist,
+commit `a37dd45` Nuxti `master`-isse). S4 (NEWS_ENABLED=true, nädal igapäevaseid käivitusi) ootab Martinit. Analüüs ja variantide võrdlus on failides
 `local-news-worker-plan.md` (Worker) ja `local-news-github-actions-plan.md` (Actions). See dokument on
 teostusplaan; kus see analüüsidokumentide visanditest erineb, kehtib see siin.
 
@@ -122,7 +124,7 @@ sisendeid see ei tunne, esimene käsitsi käivitus GitHubis jääb selle osas te
    või panna `NUXT_BRANCH` haru nimele.
 Valmis, kui: portal-api Actionsi vahelehel on "Local news" workflow nupuga "Run workflow".
 
-**S3. Esimene käsitsi käivitus (sina käivitad, mina loen tulemust).**
+**S3. Esimene käsitsi käivitus (sina käivitad, mina loen tulemust). Tehtud 2026-10-03, vt staatus üleval.**
 "Run workflow". Oodatav: 3–5 minutiga roheline käivitus; kokkuvõttes `outcome=published` rida ja
 tõlgete pistekontroll; artefakt; Nuxti repos sihtharus uus commit "chore(data): local news
 YYYY-MM-DD" ühe failiga; sait ehitub nagu Workeri commit'ide järel. Kui mõni Hispaania allikas
