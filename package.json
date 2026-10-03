@@ -5,19 +5,21 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --persist-to .wrangler/local-state --test-scheduled",
-	"db:migrate:local": "wrangler d1 migrations apply portal-db --local --persist-to .wrangler/local-state",
-	"db:seed:local": "wrangler d1 execute portal-db --local --persist-to .wrangler/local-state --file ./dev-data/seed.sql",
-	"db:list-files": "powershell -NoProfile -Command \"Get-ChildItem -Path .wrangler/local-state -Recurse -Include *.sqlite,*.sqlite3,*.db | Sort-Object LastWriteTime -Descending | Select-Object FullName,LastWriteTime,Length\"",
+    "db:migrate:local": "wrangler d1 migrations apply portal-db --local --persist-to .wrangler/local-state",
+    "db:seed:local": "wrangler d1 execute portal-db --local --persist-to .wrangler/local-state --file ./dev-data/seed.sql",
+    "db:list-files": "powershell -NoProfile -Command \"Get-ChildItem -Path .wrangler/local-state -Recurse -Include *.sqlite,*.sqlite3,*.db | Sort-Object LastWriteTime -Descending | Select-Object FullName,LastWriteTime,Length\"",
     "start": "wrangler dev",
     "test": "vitest",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "lint:workflows": "node scripts/check-workflows.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.4",
     "@types/node": "^25.5.2",
     "typescript": "^5.5.2",
     "vitest": "~3.2.0",
-    "wrangler": "^4.81.1"
+    "wrangler": "^4.81.1",
+    "yaml": "^2.9.1"
   },
   "dependencies": {
     "jose": "^6.2.3"

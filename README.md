@@ -62,6 +62,23 @@ Out of scope by default:
 - extra Cloudflare products unless clearly needed
 - speculative abstractions for future use cases
 
+## Scheduled Jobs
+
+Two kinds of scheduled work are wired up from this repo:
+
+- **Worker crons** (`wrangler.jsonc`): the hourly external-data fetch and the GitHub export that
+  commits the weather, marine and booked-dates files to the Nuxt repo. Operations notes:
+  `docs/cloudflare-operations.md`.
+- **Local news** (`.github/workflows/local-news.yml`): a GitHub Actions workflow, not Worker code.
+  Daily at 10:19 Europe/Madrid it checks out the Nuxt repo, runs the news pipeline that lives there
+  (`scripts/costaseasons-news-v2`) and commits its one output file straight to the same branch the
+  Worker exports to. Switched on and off with repository variables, no deploy needed. The pipeline
+  does not fit the Workers Free plan (CPU time and subrequest limits), which is why it runs here;
+  the analysis and the step plan are in `docs/local-news-github-actions-implementation.md`.
+
+The Worker and the workflow commit to the same branch of the Nuxt repo. They touch different
+files; the export job's non-forced ref update simply retries on the next window if it loses a race.
+
 ## Local Development
 
 Install dependencies:
@@ -74,3 +91,15 @@ Typical local Worker URL:
 http://localhost:8787
 
 Main configuration lives in: wrangler.jsonc
+
+Check the GitHub Actions workflow files before pushing (YAML syntax, basic workflow shape, cron
+fields, pinned actions, `steps.<id>` references, and `bash -n` on every `run:` script when bash is
+on the PATH):
+
+```bash
+npm run lint:workflows
+```
+
+GitHub itself only validates a workflow after it is pushed, so this is the local safety net. It
+does not know the full workflow schema or an action's inputs; the first manual run on GitHub
+remains the real test for those.

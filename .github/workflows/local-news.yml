@@ -1,0 +1,140 @@
+# Local news for costaseasons.com.
+#
+# Runs the pipeline that lives in the Nuxt repo (scripts/costaseasons-news-v2) and commits its
+# single output file, app/data/local-news/latest-news-list.json, straight to that repo, the same
+# way the Worker commits the weather and marine files. Nothing in this repo is read or written.
+#
+# Switches (repository variables, no commit needed): NEWS_ENABLED, NEWS_DAYS, NUXT_BRANCH.
+# Secrets: NUXT_REPO_TOKEN (PAT, contents read/write on the Nuxt repo), OPENAI_API_KEY.
+# Plan and operating notes: docs/local-news-github-actions-implementation.md
+name: Local news
+
+on:
+  schedule:
+    - cron: '19 10 * * *'
+      timezone: 'Europe/Madrid'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: local-news
+  cancel-in-progress: false
+
+jobs:
+  news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NUXT_BRANCH: ${{ vars.NUXT_BRANCH || 'master' }}
+      PIPELINE_DIR: scripts/costaseasons-news-v2
+    defaults:
+      run:
+        # Explicit bash turns on pipefail, so `publish | tee` keeps the CLI exit code (2 = gate failed).
+        shell: bash
+        working-directory: scripts/costaseasons-news-v2
+    steps:
+      - name: Decide whether to run today
+        id: guard
+        working-directory: .
+        env:
+          ENABLED: ${{ vars.NEWS_ENABLED }}
+          DAYS: ${{ vars.NEWS_DAYS }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          run=false
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            run=true
+          elif [ "$ENABLED" != "true" ]; then
+            echo "NEWS_ENABLED is not true; nothing to do"
+          elif [ -z "$DAYS" ]; then
+            run=true
+          else
+            today=$(TZ=Europe/Madrid date +%u)
+            case ",$DAYS," in
+              *,"$today",*) run=true ;;
+              *) echo "weekday $today is not in NEWS_DAYS=$DAYS; nothing to do" ;;
+            esac
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the Nuxt repo
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: meltsas/non-touristic-rentals
+          ref: ${{ env.NUXT_BRANCH }}
+          token: ${{ secrets.NUXT_REPO_TOKEN }}
+
+      - name: Set up Node 24
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: scripts/costaseasons-news-v2/package-lock.json
+
+      - name: Install the pipeline
+        if: steps.guard.outputs.run == 'true'
+        run: npm ci
+
+      - name: Generate, translate, write the dataset file
+        if: steps.guard.outputs.run == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node src/cli.ts publish --no-cache | tee "$RUNNER_TEMP/publish.log"
+
+      - name: Write the run summary
+        if: always() && steps.guard.outputs.run == 'true'
+        working-directory: .
+        run: |
+          {
+            echo '## Local news'
+            echo
+            echo '```'
+            if [ -f "$RUNNER_TEMP/publish.log" ]; then
+              grep -m1 '^outcome=' "$RUNNER_TEMP/publish.log" || tail -n 5 "$RUNNER_TEMP/publish.log"
+            else
+              echo 'the run stopped before the pipeline started (see the failed step above)'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          review=$(ls -d "$PIPELINE_DIR"/runs/*/translation-review.md 2>/dev/null | tail -n 1 || true)
+          if [ -n "$review" ]; then
+            {
+              echo
+              echo '<details><summary>Translation spot check</summary>'
+              echo
+              cat "$review"
+              echo
+              echo '</details>'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the run artifacts for 30 days
+        if: always() && steps.guard.outputs.run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: local-news-${{ github.run_id }}
+          path: scripts/costaseasons-news-v2/runs
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Commit and push
+        if: steps.guard.outputs.run == 'true'
+        working-directory: .
+        env:
+          COMMITTER_NAME: ${{ vars.NEWS_COMMITTER_NAME || 'Portal Data Bot' }}
+          COMMITTER_EMAIL: ${{ vars.NEWS_COMMITTER_EMAIL || 'portal-data-bot@gmail.com' }}
+        run: |
+          git config user.name "$COMMITTER_NAME"
+          git config user.email "$COMMITTER_EMAIL"
+          git add app/data/local-news/latest-news-list.json
+          if git diff --cached --quiet; then
+            echo "dataset file unchanged; nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(data): local news $(date -u +%F)"
+          # The Worker may have committed weather or marine data meanwhile; different files, no conflict.
+          git pull --rebase origin "$NUXT_BRANCH"
+          git push origin "HEAD:$NUXT_BRANCH"
