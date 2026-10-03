@@ -1,6 +1,8 @@
 # Kohalike uudiste pipeline GitHub Actionsis: teostusplaan
 
-Staatus: S1 tehtud 2026-10-02 (workflow-fail ja README lõik on harus `local-news-gereration`), S2 ootab Martinit. Analüüs ja variantide võrdlus on failides
+Staatus: S1 tehtud 2026-10-02, S2 ja S3 tehtud 2026-10-03 (workflow on portal-api `master`-is; esimene
+käsitsi käivitus õnnestus: 11 mudelikõnet, $0.0122, pipeline'i samm 1 min 21 s, 21 kirjet, 3 tagasilükkamist,
+commit `a37dd45` Nuxti `master`-isse). S4 algas 2026-10-03 õhtul (`NEWS_ENABLED=true`); esimene ajastatud käivitus 2026-10-04 tuli 5 h 48 min hilinemisega (16:07 Madridi aega), vt §2 "Kellaaeg"; tulemus korras (24 kirjet, 10 kõnet, $0.0116, 1 tagasilükkamine). Analüüs ja variantide võrdlus on failides
 `local-news-worker-plan.md` (Worker) ja `local-news-github-actions-plan.md` (Actions). See dokument on
 teostusplaan; kus see analüüsidokumentide visanditest erineb, kehtib see siin.
 
@@ -54,9 +56,18 @@ versioonil `v7` (kontrollitud GitHubi release-lehtedelt 2026-10-02; kõik jookse
 
 Märkused:
 
-- **Kellaaeg.** `timezone` on GitHubi dokumentatsioonis `schedule` sündmuse võti. Kui valideerija
-  seda ei võta, on asendus kaks UTC-croni (`19 8` suvel, `19 9` talvel) ja guard-sammus lisakontroll
-  `TZ=Europe/Madrid date +%H` = `10`. Minut 19 ei ole täistund, mille koormuse eest GitHub hoiatab.
+- **Kellaaeg.** Failis on `cron: '19 10 * * *'` koos `timezone: 'Europe/Madrid'` võtmega. Võti on GitHubi
+  dokumentatsioonis olemas (kontrollitud lähtefailist 2026-10-04, funktsioonilipp kehtib github.com-is).
+  Esimene ajastatud käivitus, 2026-10-04, algas kell 16:07 Madridi aega ehk 5 h 48 min hiljem kui
+  10:19; GitHubil intsidente polnud, fail `master`-is oli õige. GitHub ütleb ise, et `schedule` võib
+  koormuse all hilineda, ja esimene ajastatud käivitus pärast workflow lisamist on teadaolevalt sageli
+  hiline. Otsus 2026-10-04: faili ei muudeta, vaadatakse järgmiste päevade käivitusaegu. **Plaan B**, kui
+  hilinemine kordub tunde: kaks UTC-croni `19 8 * * *` (10:19 CEST) ja `19 9 * * *` (10:19 CET) ilma
+  `timezone` võtmeta, ja guard-samm jooksutab ainult selle, mis Madridi kella DST-seisule vastab
+  (`github.event.schedule` võrdlus `TZ=Europe/Madrid date +%Z` järgi); teine päevane käivitus jääb
+  guard'i taha ja maksab minuti. Muudatus on valmis kirjutatud ja lint'itud, aga rakendamata, sest iga
+  ajakava muutmine registreerib selle uuesti ja võib esimese käivituse jälle hiliseks teha.
+  Minut 19 ei ole täistund, mille koormuse eest GitHub hoiatab.
 - **Sisse/välja ja sagedus** on repo muutujad, muudetavad ilma commit'ita: `NEWS_ENABLED`
   `true`/`false`; `NEWS_DAYS` tühi = iga päev, `1,3,5` = kolm korda nädalas. "Run workflow" nupp
   eirab mõlemat, nagu Workeri admin-endpoint "käivita kohe".
@@ -122,7 +133,7 @@ sisendeid see ei tunne, esimene käsitsi käivitus GitHubis jääb selle osas te
    või panna `NUXT_BRANCH` haru nimele.
 Valmis, kui: portal-api Actionsi vahelehel on "Local news" workflow nupuga "Run workflow".
 
-**S3. Esimene käsitsi käivitus (sina käivitad, mina loen tulemust).**
+**S3. Esimene käsitsi käivitus (sina käivitad, mina loen tulemust). Tehtud 2026-10-03, vt staatus üleval.**
 "Run workflow". Oodatav: 3–5 minutiga roheline käivitus; kokkuvõttes `outcome=published` rida ja
 tõlgete pistekontroll; artefakt; Nuxti repos sihtharus uus commit "chore(data): local news
 YYYY-MM-DD" ühe failiga; sait ehitub nagu Workeri commit'ide järel. Kui mõni Hispaania allikas
