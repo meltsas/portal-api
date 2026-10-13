@@ -251,6 +251,15 @@ export interface FormSubmissionRow {
 	updated_at: string;
 }
 
+// Admin list/detail view: no Google subject, values only in the detail query.
+export interface FormSubmissionWithJoinsRow
+	extends Omit<FormSubmissionRow, 'values_json' | 'google_subject' | 'created_at' | 'updated_at'> {
+	display_name: string;
+	offer_id: string;
+	offer_title: string | null;
+	file_count: number;
+}
+
 export interface FormSubmissionFileRow {
 	id: string;
 	invitation_id: string;

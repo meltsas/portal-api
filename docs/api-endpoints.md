@@ -7,8 +7,9 @@ Routerid asuvad:
 - Public routes: `src/routes/public.ts`
 - Auth routes: `src/routes/auth.ts`
 - Admin routes: `src/routes/admin.ts`
+- Tenant details form routes: `src/routes/tenantForms.ts`
 
-> Kõik response bodyd on JSON. Vea korral tagastatakse `{ "error": "<message>" }` koos vastava HTTP statusega (400, 401, 403, 404, 405, 409, 422).
+> Kõik response bodyd on JSON. Vea korral tagastatakse `{ "error": "<message>" }` koos vastava HTTP statusega (400, 401, 403, 404, 405, 409, 410, 411, 413, 415, 422). Erand: `GET /api/admin/tenant-forms/files/:fileId` tagastab faili enda.
 
 ---
 
@@ -30,13 +31,17 @@ Standardsed status codid:
 - `201 Created` — uus resource (lead, offer) loodud.
 - `400 Bad Request` — invalid payload või validation viga.
 - `401 Unauthorized` — sessioon puudub või on aegunud.
-- `403 Forbidden` — sessioon on olemas, aga email pole admin allowlistis.
+- `403 Forbidden` — sisselogimisel (`POST /api/auth/google`) email pole admin allowlistis; tenant formi puhul on link seotud teise Google kontoga.
 - `404 Not Found` — route ei klappi või resource puudub.
 - `405 Method Not Allowed` — path on olemas, kuid method ei ole.
-- `409 Conflict` — slug juba olemas.
+- `409 Conflict` — slug juba olemas; tenant formi puhul juba saadetud vorm või täis failipiirang.
+- `410 Gone` — tenant formi invitation on aegunud või tühistatud.
+- `411 Length Required` — faili üleslaadimisel puudub `Content-Length`.
+- `413 Content Too Large` — fail või request body on lubatust suurem.
+- `415 Unsupported Media Type` — failitüüp pole lubatud.
 - `422 Unprocessable Entity` — payload kehtiv, aga business reegel takistab (näiteks offer pole `active`).
 
-Public routed ei nõua auth-i. Auth routed haldavad sessiooni cookiet `portal_session`. Admin routed nõuavad kehtivat sessiooni cookie'd (vt jaotis 6).
+Public routed ei nõua auth-i. Auth routed haldavad sessiooni cookiet `session`. Admin routed nõuavad kehtivat sessiooni cookie'd (vt jaotis 6).
 
 ---
 
@@ -146,8 +151,8 @@ Rate limiting / abuse protection on plaanitud Cloudflare WAF / Rate Limiting ree
   "name": "Jane Doe",
   "message": "Interested in early June.",
   "dateFrom": "2026-06-01",
-  "dateTo": "2026-06-08",
-  "reasonOfStay": "Family holiday with two kids",
+  "dateTo": "2026-07-01",
+  "reasonOfStay": "pensioner_seasonal",
   "googleToken": "<google-id-token>"
 }
 ```
@@ -158,7 +163,7 @@ Validation:
 - `offerId` — required, mitte-tühi string (offer'i UUID).
 - `name` — required, mitte-tühi, kuni 200 chars.
 - `message` — required, mitte-tühi, kuni 2000 chars.
-- `dateFrom`, `dateTo` — required, formaadis `YYYY-MM-DD`, `dateFrom <= dateTo`.
+- `dateFrom`, `dateTo` — required, päris kuupäevad formaadis `YYYY-MM-DD` (nt `2026-02-30` lükatakse tagasi), vähemalt 14 ööd (`MIN_STAY_NIGHTS` failis `src/utils/stay.ts`).
 - `reasonOfStay` — optional, string või `null`, kuni 300 chars. Trimmitakse; tühi string salvestatakse `null`'ina.
 - Email **ei tule** payloadist — see võetakse verifitseeritud token claim'ist (`email`) ja salvestatakse lowercase'is. Token claim `sub` salvestatakse `auth_subject`'ina, `auth_provider = 'google'`.
 
@@ -176,7 +181,7 @@ Tagastatakse nii uue lead'i loomisel kui ka olemasoleva uuendamisel.
 { "error": "googleToken is required" }
 ```
 
-Muud võimalikud sõnumid: `offerId is required`, `name is required`, `message is required`, `dateFrom must be YYYY-MM-DD`, `dateTo must be YYYY-MM-DD`, `dateFrom must not be after dateTo`, `name must be at most 200 characters`, `message must be at most 2000 characters`, `reasonOfStay must be a string`, `reasonOfStay must be at most 300 characters`, `Offer not found`, `Invalid or missing JSON body`.
+Muud võimalikud sõnumid: `offerId is required`, `name is required`, `message is required`, `dateFrom must be YYYY-MM-DD`, `dateTo must be YYYY-MM-DD`, `stay must be at least 14 nights`, `name must be at most 200 characters`, `message must be at most 2000 characters`, `reasonOfStay must be a string`, `reasonOfStay must be at most 300 characters`, `Offer not found`, `Invalid or missing JSON body`.
 
 **Response 401:**
 
@@ -198,7 +203,7 @@ Tagastatakse kui offer eksisteerib, aga pole `active` staatuses.
 
 ## 5. Auth
 
-Auth flow põhineb Google ID tokenil. Frontend saab Google'ist ID tokeni, postib selle `/api/auth/google` peale, server verifitseerib selle, kontrollib emailit allowlisti vastu (vt `ALLOWED_EMAILS` failis `src/handlers/auth.ts`) ja seab HMAC-allkirjastatud sessiooni cookie `portal_session`.
+Auth flow põhineb Google ID tokenil. Frontend saab Google'ist ID tokeni, postib selle `/api/auth/google` peale, server verifitseerib selle, kontrollib emailit allowlisti vastu (`src/utils/adminAllowlist.ts`) ja seab HMAC-allkirjastatud sessiooni cookie `session` (payload `{ typ: "admin", email, exp }`, secret `SESSION_SECRET`).
 
 Cookie atribuudid:
 
@@ -226,7 +231,7 @@ Vahetab Google ID tokeni sessiooni cookie vastu.
 { "ok": true }
 ```
 
-Lisaks seatakse vastuses `Set-Cookie: portal_session=...` header.
+Lisaks seatakse vastuses `Set-Cookie: session=...` header.
 
 **Response 400:**
 
@@ -248,7 +253,7 @@ Tagastatakse kui Google token ei verifitseeru (sealhulgas vale `aud`, aegunud to
 { "error": "Forbidden" }
 ```
 
-Tagastatakse kui token kehtib, aga email pole `ALLOWED_EMAILS` listis.
+Tagastatakse kui token kehtib, aga email pole admin allowlistis (`src/utils/adminAllowlist.ts`).
 
 ---
 
@@ -264,7 +269,7 @@ Tühistab sessiooni cookie. Endpoint ei kontrolli olemasolevat sessiooni — kut
 { "ok": true }
 ```
 
-Vastuses on `Set-Cookie: portal_session=; Max-Age=0; ...`.
+Vastuses on `Set-Cookie: session=; Max-Age=0; ...`.
 
 ---
 
@@ -274,7 +279,7 @@ Tagastab praeguse sessiooni email'i. Kasulik admin UI-le, et kontrollida, kas ka
 
 **Request body:** puudub.
 
-**Cookies:** vajalik kehtiv `portal_session`.
+**Cookies:** vajalik kehtiv `session`.
 
 **Response 200:**
 
@@ -292,14 +297,13 @@ Tagastab praeguse sessiooni email'i. Kasulik admin UI-le, et kontrollida, kas ka
 
 ## 6. Admin — auth nõue
 
-Kõik `/api/admin/*` routed jooksevad läbi `requireAdmin()` middleware'i (`src/middleware/requireAdmin.ts`), mis kontrollib `portal_session` cookiet ja peab kehtiva HMAC sessiooni.
+Kõik `/api/admin/*` routed jooksevad läbi `requireAdmin()` middleware'i (`src/middleware/requireAdmin.ts` → `requireAuth`). Igal päringul kontrollitakse:
 
-> NB: Praegu (vt route-faili kommentaari) on `requireAdmin()` pass-through stub. Päris auth lisatakse middleware faili — endpointide signatuuri see ei muuda.
+- `session` cookie HMAC allkiri (`SESSION_SECRET`) ja tüüp `typ: "admin"` (muu tüübiga token, nt tenant formi token, ei sobi);
+- `exp` pole möödas;
+- email on endiselt admin allowlistis. Emaili eemaldamine allowlistist lõpetab kohe selle sessionid.
 
-Tüüpilised vead admin endpointidel:
-
-- `401 Unauthorized` — `portal_session` puudub, on aegunud või HMAC ei klapi.
-- `403 Forbidden` — sessioon kehtib, aga email pole admin allowlist'is.
+Kõik need vead annavad admin endpointidel `401 Unauthorized` (`{ "error": "Unauthorized" }`). `403` tuleb ainult sisselogimisel.
 
 ---
 
@@ -1301,7 +1305,393 @@ Tühi body (`{}` või puuduv body) on lubatud — rakendatakse defaultid.
 
 ---
 
-## 13. Endpointide kokkuvõte
+## 13. Public — Tenant details form
+
+Kutsepõhine vorm, mis asendab Google Formsi. Admin loob invitationi (jaotis 14), huviline avab lingi
+`https://costaseasons.com/tenant-details/<token>`, logib Google'iga sisse, täidab vormi, laeb
+dokumendid üles ja saadab. Disain: `non-touristic-rentals/docs/seasona-rental-details-form/roadmap.md`.
+
+Põhireeglid:
+
+- **Invitationi token** (43 märki base64url, 256 bitti) liigub ainult POST body's, mitte URL-is, et
+  see logidesse ei satuks. D1-s on ainult selle SHA-256 hash.
+- **Identiteet** tuleb ainult serveris kontrollitud Google ID tokenist. Esimene edukas login seob
+  invitationi selle Google kontoga (`sub`), teine konto saab 403.
+- **Access token** (`POST /auth/google` vastus) saadetakse kujul `Authorization: Bearer <accessToken>`.
+  See kehtib 2 h ja on allkirjastatud `TENANT_FORM_SECRET`-iga (`typ: "tenant_form"`); admin
+  endpointidel see ei kehti. Aegunud token → 401, seejärel uus Google login samale invitationile.
+- **Invitationi olekut kontrollitakse igal päringul:** aegunud → 410 `{ "status": "expired" }`,
+  tühistatud → 410 `{ "status": "revoked" }`, juba saadetud → 409 `{ "status": "submitted" }`.
+- **Väärtused** on `field_key → value`, valikud `option_key`-dena. Kaaskülaliste loend on ridade
+  massiiv, failiväljad on üleslaaditud failide `id`-de massiiv ja „other“ valiku vabatekst on
+  võtmes `<field_key>_other`.
+- **Request bodyd tenant formi route'idel ei logita** (`requestLogger`).
+
+Valideerimisvigade kuju (`400`):
+
+```json
+{
+  "error": "Invalid form values",
+  "errors": [
+    { "field": "first_name", "code": "required" },
+    { "field": "other_guests[1].sex", "code": "required" },
+    { "field": "planned_departure", "code": "stay_too_short" }
+  ]
+}
+```
+
+Võimalikud koodid: `unknown_field`, `required`, `invalid_type`, `too_short`, `too_long`,
+`invalid_email`, `invalid_phone`, `invalid_date`, `date_in_future`, `date_order`, `stay_too_short`,
+`out_of_range`, `invalid_option`, `too_many_items`, `too_few_files`, `too_many_files`,
+`duplicate_file`, `invalid_file`.
+
+---
+
+### `POST /api/tenant-forms/invitations/resolve`
+
+Kontrollib invitationi tokenit. Esimesel avamisel muutub staatus `pending → opened`.
+
+**Request body:**
+
+```json
+{ "token": "<invitation-token>" }
+```
+
+**Response 200:**
+
+```json
+{
+  "status": "opened",
+  "displayName": "Test Example",
+  "offer": { "title": "Casa Bonita", "slug": "casa-bonita" },
+  "language": "sv",
+  "expiresAt": "2026-10-18T12:00:00Z"
+}
+```
+
+**Response 404:** token puudub, on vigase kujuga või tundmatu (kõigil juhtudel sama vastus).
+**Response 410 / 409:** invitation on aegunud, tühistatud või juba saadetud (vt põhireeglid).
+
+---
+
+### `POST /api/tenant-forms/auth/google`
+
+Vahetab Google ID tokeni (GSI) tenant access tokeni vastu.
+
+**Request body:**
+
+```json
+{ "token": "<invitation-token>", "googleIdToken": "<google-id-token>" }
+```
+
+**Response 200:**
+
+```json
+{ "accessToken": "<bearer-token>", "expiresAt": "2026-10-13T14:00:00Z", "googleEmail": "guest@example.com" }
+```
+
+- `400` — `googleIdToken` puudub või body pole JSON.
+- `401` — Google token ei verifitseeru või email pole kinnitatud (`email_verified`).
+- `403` — invitation on seotud teise Google kontoga.
+- `404`, `409`, `410` — nagu resolve'il.
+
+Õnnestumine kirjutab sündmuse `tenant_authenticated`, tagasilükkamine `auth_rejected`
+(metadata ainult põhjus).
+
+---
+
+### `GET /api/tenant-forms/form`
+
+**Auth:** Bearer access token.
+
+Tagastab vormi invitationi keeles (puuduvad tekstid inglise keeles), muutujad (`{offerTitle}`,
+`{displayName}`, `{maxFiles}`, `{maxFileSizeMb}`) on täidetud. Lisaks salvestatud mustand ja saatmata
+failid, et huviline saaks pärast uut sisselogimist jätkata.
+
+**Response 200 (lühendatud):**
+
+```json
+{
+  "invitation": { "displayName": "Test Example", "language": "sv", "expiresAt": "…", "offer": { "title": "…", "slug": "…" } },
+  "prefill": { "contactEmail": "guest@example.com" },
+  "template": { "id": "tenant_details_v1", "title": "…", "intro": "…", "successMessage": "…" },
+  "sections": [
+    {
+      "key": "stay",
+      "title": "Resa & vistelse",
+      "description": "…",
+      "fields": [
+        {
+          "key": "planned_departure",
+          "type": "date",
+          "required": true,
+          "validation": { "minNightsAfter": "planned_arrival", "minNights": 14 },
+          "visibleIf": null,
+          "label": "Planerad avresa",
+          "help": null,
+          "placeholder": null,
+          "body": null,
+          "options": [],
+          "itemFields": []
+        }
+      ]
+    }
+  ],
+  "draft": { "values": { "first_name": "Åsa" }, "savedAt": "2026-10-13T12:00:00Z" },
+  "uploadedFiles": [
+    { "id": "…", "fieldKey": "id_documents", "originalFilename": "pass.jpg", "mimeType": "image/jpeg", "sizeBytes": 812345, "uploadedAt": "…" }
+  ]
+}
+```
+
+Tekstides on piiratud vormindus (`**paks**`, `*kaldkiri*`, lõigud, `- ` loetelu, `[link](https://…)`).
+Frontend peab need escape'iva renderdajaga kuvama, mitte `v-html`-iga.
+
+---
+
+### `POST /api/tenant-forms/files`
+
+**Auth:** Bearer access token.
+
+Faili üleslaadimine. Body on faili baidid (mitte multipart).
+
+**Headerid:**
+
+- `X-Field-Key` — `file` tüüpi välja võti, nt `id_documents` (kohustuslik).
+- `X-File-Name` — originaalne failinimi, URL-encoded (valikuline). Salvestatakse puhastatult ainult D1-sse.
+- `Content-Length` — kohustuslik.
+
+Kontrollid: kuni 10 MB faili kohta, kuni 10 faili välja kohta, kuni 50 MB salvestatud faile ja
+kuni 30 üleslaadimist invitationi kohta (kustutatud failid kaasa arvatud). Tüüp tuvastatakse faili
+esimeste baitide järgi (JPEG, PNG, PDF; välja `accept` järgi), brauseri `Content-Type`-i ega
+faililaiendit ei usaldata.
+
+**Response 201:**
+
+```json
+{ "file": { "id": "…", "fieldKey": "id_documents", "originalFilename": "pass.jpg", "mimeType": "image/jpeg", "sizeBytes": 812345, "uploadedAt": "…" } }
+```
+
+- `400` — tundmatu või puuduv `X-Field-Key`, tühi fail.
+- `409` — mõni ülaltoodud piirang on täis.
+- `411` — `Content-Length` puudub.
+- `413` — fail on üle 10 MB.
+- `415` — failitüüp pole lubatud (nt HTML, SVG, HEIC).
+
+R2 võti on `tenant-forms/{invitationId}/{fileId}` (bucket `costa-seasons-tenant-documents`, binding `tenant_files`).
+
+---
+
+### `DELETE /api/tenant-forms/files/:fileId`
+
+**Auth:** Bearer access token.
+
+Eemaldab saatmata faili (R2-st kustutatakse, D1-s `status = 'deleted'`).
+
+**Response 200:** `{ "ok": true }`
+**Response 404:** fail puudub, kuulub teisele invitationile või on juba kustutatud/saadetud.
+
+---
+
+### `PUT /api/tenant-forms/draft`
+
+**Auth:** Bearer access token.
+
+Salvestab pooliku vormi, asendades eelmise mustandi. Kontrollib tundmatuid välju, tüüpe, pikkusi
+ja valikuid, aga mitte kohustuslikke välju, formaate ega minimaalset peatumist. Failiväljad jäetakse
+välja (failid on `uploadedFiles`-is).
+
+**Request body (max 100 KB):**
+
+```json
+{ "values": { "first_name": "Åsa", "phone": "+46 70" } }
+```
+
+**Response 200:** `{ "savedAt": "2026-10-13T12:00:00Z" }`
+**Response 400:** valideerimisvead. **Response 413:** body on liiga suur.
+
+---
+
+### `POST /api/tenant-forms/submit`
+
+**Auth:** Bearer access token.
+
+Valideerib kogu vormi ja kontrollib, et iga failiväljal olev `id` on selle invitationi saatmata fail
+õigel väljal. Siis ühes D1 batch'is: submission luuakse, failid seotakse (`attached`), invitation
+läheb `submitted` olekusse, mustand kustutatakse ja kirjutatakse sündmus `submitted`.
+Dokumentide kustutamise aeg (`documents_delete_after`) on `planned_departure` + 30 päeva.
+
+**Request body (max 200 KB):**
+
+```json
+{ "values": { "planned_arrival": "2026-12-01", "planned_departure": "2027-01-15", "first_name": "Åsa", "id_documents": ["<file-id>"], "privacy_consent": true } }
+```
+
+**Response 201:** `{ "submissionId": "…", "submittedAt": "2026-10-13T12:00:00Z" }`
+
+- `400` — valideerimisvead (`invalid_file`, kui fail ei kuulu sellele invitationile).
+- `409` — vorm on juba saadetud.
+- `413` — body on liiga suur.
+
+---
+
+## 14. Admin — Tenant details forms
+
+Kõik route'id on `requireAdmin()` all (jaotis 6). Admini email võetakse sessionist ja kirjutatakse
+`created_by_email`, `reviewed_by_email` ja `form_events.actor_ref` väljadele.
+
+### `GET /api/admin/tenant-forms/templates`
+
+Template'ide list koos iga toetatud keele (`en`, `sv`, `fi`, `no`) tõlke valmidusega.
+
+```json
+{
+  "data": [
+    {
+      "id": "tenant_details_v1",
+      "templateKey": "tenant_details",
+      "version": 1,
+      "status": "active",
+      "baseLanguage": "en",
+      "languages": [
+        { "language": "en", "translated": 99, "total": 99 },
+        { "language": "fi", "translated": 0, "total": 99 }
+      ]
+    }
+  ]
+}
+```
+
+`translated` loeb ainult neid võtmeid, mis on olemas ka baaskeeles.
+
+### `GET /api/admin/tenant-forms/templates/:id`
+
+Sama mis listi rida, lisaks `sections` (struktuur: väljad, tüübid, required, validatsioon, valikud,
+`itemFields`), `textKeys` (kõik võimalikud tekstivõtmed koos `required` lipuga) ja `texts`
+(`language → text_key → text`, iga toetatud keel olemas, võib olla tühi). **404** tundmatu id korral.
+
+---
+
+### `POST /api/admin/tenant-forms/invitations`
+
+**Request body:**
+
+```json
+{ "displayName": "Test Example", "offerId": "offer_001", "language": "sv", "validDays": 5, "leadId": null }
+```
+
+- `displayName` — kohustuslik, kuni 200 märki.
+- `offerId` — olemasolev offer.
+- `language` — `en`, `sv`, `fi` või `no`.
+- `validDays` — täisarv 1–14, vaikimisi 5.
+- `leadId` — valikuline, olemasolev lead.
+
+Template valitakse serveris (aktiivne `tenant_details`, suurim versioon).
+
+**Response 201:**
+
+```json
+{ "invitation": { "id": "…", "status": "pending", "expiresAt": "…", "…": "…" }, "url": "https://costaseasons.com/tenant-details/<token>" }
+```
+
+`url` (koos raw tokeniga) tagastatakse **ainult siin**. Hiljem seda näha ei saa, sest D1-s on ainult
+hash. Baasaadress tuleb muutujast `TENANT_FORM_URL_BASE`.
+
+**Response 400:** valideerimisviga või tundmatu offer/lead.
+
+### `GET /api/admin/tenant-forms/invitations`
+
+Filtrid `?status=pending|opened|submitted|expired|revoked` ja `?offerId=`. `expired` arvutatakse
+`expires_at` põhjal ega ole kunagi salvestatud.
+
+Iga rida (`AdminTenantFormInvitation`): `id`, `templateId`, `displayName`, `offerId`, `offerTitle`,
+`language`, `status`, `expiresAt`, `googleEmail`, `leadId`, `submissionId`, `createdByEmail`,
+`openedAt`, `authenticatedAt`, `submittedAt`, `revokedAt`, `createdAt`, `updatedAt`.
+
+### `GET /api/admin/tenant-forms/invitations/:id`
+
+Sama rida koos `events` ajajoonega (`eventType`, `actorType`, `actorRef`, `submissionId`, `fileId`,
+`metadata`, `createdAt`). **404** tundmatu id korral.
+
+### `POST /api/admin/tenant-forms/invitations/:id/revoke`
+
+Tühistab saatmata invitationi (ka aegunud oma). Andmeid ei kustutata.
+**Response 200:** uuendatud invitation. **409:** juba tühistatud või saadetud. **404:** tundmatu id.
+
+---
+
+### `GET /api/admin/tenant-forms/submissions`
+
+Filtrid `?status=submitted|approved|rejected|archived` ja `?offerId=`.
+
+Iga rida: `id`, `invitationId`, `displayName`, `offerId`, `offerTitle`, `fullName`, `contactEmail`,
+`phone`, `plannedArrival`, `plannedDeparture`, `language` (mis keeles täideti), `status`,
+`fileCount`, `submittedAt`, `reviewedAt`, `remoteIp` ja `userAgent` (salvestatud submit'i hetkel,
+`CF-Connecting-IP` ja `User-Agent`, nagu leads'i puhul). Google `sub`-i ei tagastata.
+
+### `GET /api/admin/tenant-forms/submissions/:id`
+
+Vastused **alati ingliskeelsete siltidega**, sõltumata täitmise keelest. Iga vaatamine kirjutab
+sündmuse `submission_viewed`.
+
+Lisaks listi väljadele: `templateId`, `googleEmail` (kontrollitud Google konto), `reviewedByEmail`,
+`reviewNotes`, `documentsDeleteAfter`, `documentsDeletedAt`, `files` (metadata), `values`
+(salvestatud väärtused), `events` ja `sections`:
+
+```json
+{
+  "sections": [
+    {
+      "key": "purpose",
+      "title": "Purpose of stay",
+      "answers": [
+        {
+          "key": "stay_purpose",
+          "type": "single_choice",
+          "label": "Main reason for visiting Spain",
+          "value": "other",
+          "displayValue": "Other non-tourist reason (please specify): Language course",
+          "items": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+Kaaskülaliste loendi vastusel on `items` (iga rida oma vastustega). Vastamata väljal on `value` ja
+`displayValue` `null`. **404** tundmatu id korral.
+
+### `PUT /api/admin/tenant-forms/submissions/:id/review`
+
+**Request body:**
+
+```json
+{ "status": "approved", "reviewNotes": "Video call done" }
+```
+
+- `status` — `approved`, `rejected` või `archived`.
+- `reviewNotes` — valikuline, kuni 2000 märki. Puudub → märkmed jäävad samaks; `null` või `""` → kustutatakse.
+
+Kirjutab sündmuse, mille tüüp on sama mis `status` (märkmeid sündmusse ei kirjutata).
+**Response 200:** uuendatud rida koos `reviewedByEmail` ja `reviewNotes`-iga. **400** / **404**.
+
+### `GET /api/admin/tenant-forms/files/:fileId`
+
+Striimib saadetud faili privaatsest bucketist. **Vastus on fail, mitte JSON.** `?download=1` →
+`Content-Disposition: attachment`, muidu `inline`.
+
+Headerid: `Content-Type` (tuvastatud tüüp), `Content-Disposition` (ASCII fallback + `filename*`
+UTF-8), `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`,
+`Content-Security-Policy: sandbox; default-src 'none'`.
+
+Iga vaatamine kirjutab sündmuse `file_viewed` (`metadata: { "download": true|false }`).
+**404:** fail puudub, pole veel saadetud või on kustutatud. Admin UI laeb faili `fetch(..., { credentials: 'include' })`
+kaudu blob'iks.
+
+---
+
+## 15. Endpointide kokkuvõte
 
 | Method   | Path                                              | Auth   | Kirjeldus                                      |
 | -------- | ------------------------------------------------- | ------ | ---------------------------------------------- |
@@ -1336,10 +1726,27 @@ Tühi body (`{}` või puuduv body) on lubatud — rakendatakse defaultid.
 | `POST`   | `/api/admin/external-data/sources/:id/run`        | admin  | Käivita allika fetch käsitsi                   |
 | `POST`   | `/api/admin/external-data/sources/:id/cleanup`    | admin  | Kustuta vanu snapshot'eid                      |
 | `GET`    | `/api/admin/external-data/snapshots/:id`          | admin  | Snapshot'i detail (sh `normalizedJson`)        |
+| `POST`   | `/api/tenant-forms/invitations/resolve`           | none   | Kontrolli invitationi tokenit                  |
+| `POST`   | `/api/tenant-forms/auth/google`                   | none   | Vaheta Google ID token tenant access tokeni vastu |
+| `GET`    | `/api/tenant-forms/form`                          | tenant | Vorm invitationi keeles + mustand + failid     |
+| `POST`   | `/api/tenant-forms/files`                         | tenant | Laadi fail üles (raw body)                     |
+| `DELETE` | `/api/tenant-forms/files/:fileId`                 | tenant | Eemalda saatmata fail                          |
+| `PUT`    | `/api/tenant-forms/draft`                         | tenant | Salvesta pooleli vorm                          |
+| `POST`   | `/api/tenant-forms/submit`                        | tenant | Saada vorm                                     |
+| `GET`    | `/api/admin/tenant-forms/templates`               | admin  | Template'id + tõlke valmidus                   |
+| `GET`    | `/api/admin/tenant-forms/templates/:id`           | admin  | Template'i struktuur ja kõik tekstid           |
+| `GET`    | `/api/admin/tenant-forms/invitations`             | admin  | Invitationite list (filter: `?status=`, `?offerId=`) |
+| `POST`   | `/api/admin/tenant-forms/invitations`             | admin  | Loo invitation (link tagastatakse ainult siin) |
+| `GET`    | `/api/admin/tenant-forms/invitations/:id`         | admin  | Invitation + sündmuste ajajoon                 |
+| `POST`   | `/api/admin/tenant-forms/invitations/:id/revoke`  | admin  | Tühista saatmata invitation                    |
+| `GET`    | `/api/admin/tenant-forms/submissions`             | admin  | Saadetud vormide list (filter: `?status=`, `?offerId=`) |
+| `GET`    | `/api/admin/tenant-forms/submissions/:id`         | admin  | Vastused EN siltidega (logitakse)              |
+| `PUT`    | `/api/admin/tenant-forms/submissions/:id/review`  | admin  | Approve / reject / archive + märkmed           |
+| `GET`    | `/api/admin/tenant-forms/files/:fileId`           | admin  | Saadetud faili striimimine (logitakse)         |
 
 ---
 
-## 14. README.md viide
+## 16. README.md viide
 
 Soovitus: lisa projekti `README.md` faili lühike viide:
 

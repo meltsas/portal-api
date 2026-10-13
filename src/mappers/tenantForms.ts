@@ -1,8 +1,13 @@
 import type {
+	AdminTenantFormAnswer,
+	AdminTenantFormAnswerSection,
 	AdminTenantFormEvent,
 	AdminTenantFormInvitation,
+	AdminTenantFormSubmissionFile,
+	AdminTenantFormSubmissionListItem,
 	TenantFormFieldView,
 	TenantFormSchemaResponse,
+	TenantFormSubmissionStatus,
 	TenantFormUploadedFile,
 } from '../types/api';
 import type {
@@ -10,6 +15,7 @@ import type {
 	FormEventRow,
 	FormInvitationWithJoinsRow,
 	FormSubmissionFileRow,
+	FormSubmissionWithJoinsRow,
 	TenantFormInvitationAccessRow,
 } from '../types/db';
 import {
@@ -146,4 +152,94 @@ function fileLimitVariables(field: FormField): Partial<Record<TextVariable, stri
 		variables.maxFileSizeMb = String(Math.round(field.validation.maxFileBytes / BYTES_PER_MB));
 	}
 	return variables;
+}
+
+export function toAdminTenantFormSubmissionListItem(row: FormSubmissionWithJoinsRow): AdminTenantFormSubmissionListItem {
+	return {
+		id: row.id,
+		invitationId: row.invitation_id,
+		displayName: row.display_name,
+		offerId: row.offer_id,
+		offerTitle: row.offer_title,
+		fullName: row.full_name,
+		contactEmail: row.contact_email,
+		phone: row.phone,
+		plannedArrival: row.planned_arrival,
+		plannedDeparture: row.planned_departure,
+		language: row.language,
+		status: row.status as TenantFormSubmissionStatus,
+		fileCount: row.file_count,
+		submittedAt: row.submitted_at,
+		reviewedAt: row.reviewed_at,
+		remoteIp: row.remote_ip,
+		userAgent: row.user_agent,
+	};
+}
+
+export function toAdminTenantFormSubmissionFile(row: FormSubmissionFileRow): AdminTenantFormSubmissionFile {
+	return {
+		id: row.id,
+		fieldKey: row.field_key,
+		originalFilename: row.original_filename,
+		mimeType: row.mime_type,
+		sizeBytes: row.size_bytes,
+		status: row.status,
+		uploadedAt: row.uploaded_at,
+	};
+}
+
+/** Every section and field of the template in order, labelled with the given (English) texts. */
+export function toAdminTenantFormAnswers(
+	structure: FormStructure,
+	texts: Record<string, string>,
+	values: FormValues
+): AdminTenantFormAnswerSection[] {
+	return structure.sections.map((section) => ({
+		key: section.key,
+		title: texts[`section.${section.key}.title`] ?? section.key,
+		answers: section.fields
+			.filter((field) => field.type !== 'info')
+			.map((field) => toAnswer(field, field.key, values, texts)),
+	}));
+}
+
+function toAnswer(field: FormField, path: string, values: FormValues, texts: Record<string, string>): AdminTenantFormAnswer {
+	const value = values[field.key] ?? null;
+	const answer: AdminTenantFormAnswer = {
+		key: field.key,
+		type: field.type,
+		label: texts[`field.${path}.label`] ?? field.key,
+		value,
+		displayValue: null,
+		items: null,
+	};
+	if (value === null) return answer;
+
+	switch (field.type) {
+		case 'single_choice': {
+			const optionLabel = texts[`option.${path}.${String(value)}`] ?? String(value);
+			const freeText = values[`${field.key}_other`];
+			answer.displayValue = typeof freeText === 'string' ? `${optionLabel}: ${freeText}` : optionLabel;
+			break;
+		}
+		case 'checkbox':
+			answer.displayValue = value === true ? 'Yes' : 'No';
+			break;
+		case 'file': {
+			const count = Array.isArray(value) ? value.length : 0;
+			answer.displayValue = count === 1 ? '1 file' : `${count} files`;
+			break;
+		}
+		case 'guest_list': {
+			const rows = Array.isArray(value) ? (value as FormValues[]) : [];
+			answer.items = rows.map((row) =>
+				field.itemFields.map((itemField) => toAnswer(itemField, `${path}.item.${itemField.key}`, row, texts))
+			);
+			answer.displayValue = rows.length === 1 ? '1 guest' : `${rows.length} guests`;
+			break;
+		}
+		default:
+			answer.displayValue = String(value);
+	}
+	return answer;
 }

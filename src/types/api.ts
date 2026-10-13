@@ -4,6 +4,7 @@ import type {
 	FieldValidation,
 	FormLanguage,
 	FormSection,
+	FormValue,
 	FormValues,
 	TextKeySpec,
 	VisibleIf,
@@ -632,4 +633,80 @@ export interface TenantFormSubmitResponse {
 export interface TenantFormValidationErrorResponse {
 	error: string;
 	errors: FieldError[];
+}
+
+// -------------------------------------------------------
+// Admin — tenant form submissions
+// -------------------------------------------------------
+
+export type TenantFormSubmissionStatus = 'submitted' | 'approved' | 'rejected' | 'archived';
+export type TenantFormReviewStatus = Exclude<TenantFormSubmissionStatus, 'submitted'>;
+
+export interface AdminTenantFormSubmissionListItem {
+	id: string;
+	invitationId: string;
+	displayName: string;
+	offerId: string;
+	offerTitle: string | null;
+	fullName: string;
+	contactEmail: string;
+	phone: string;
+	plannedArrival: string | null;
+	plannedDeparture: string | null;
+	/** Language the tenant filled the form in. Answers are always shown in English. */
+	language: string;
+	status: TenantFormSubmissionStatus;
+	fileCount: number;
+	submittedAt: string;
+	reviewedAt: string | null;
+	/** Captured at submit, shown like on leads to help spot misuse. */
+	remoteIp: string | null;
+	userAgent: string | null;
+}
+
+/** One answer with its English label. `displayValue` is a readable English rendering of `value`. */
+export interface AdminTenantFormAnswer {
+	key: string;
+	type: FieldType;
+	label: string;
+	value: FormValue | null;
+	displayValue: string | null;
+	/** Rows of a guest list, each with its own answers; null for other field types. */
+	items: AdminTenantFormAnswer[][] | null;
+}
+
+export interface AdminTenantFormAnswerSection {
+	key: string;
+	title: string;
+	answers: AdminTenantFormAnswer[];
+}
+
+export interface AdminTenantFormSubmissionFile {
+	id: string;
+	fieldKey: string;
+	originalFilename: string;
+	mimeType: string;
+	sizeBytes: number;
+	status: string;
+	uploadedAt: string;
+}
+
+export interface AdminTenantFormSubmissionDetail extends AdminTenantFormSubmissionListItem {
+	templateId: string;
+	googleEmail: string;
+	reviewedByEmail: string | null;
+	reviewNotes: string | null;
+	documentsDeleteAfter: string | null;
+	documentsDeletedAt: string | null;
+	sections: AdminTenantFormAnswerSection[];
+	files: AdminTenantFormSubmissionFile[];
+	/** Stored values keyed by field key, for later conversion to customer/booking. */
+	values: FormValues;
+	events: AdminTenantFormEvent[];
+}
+
+export interface ReviewTenantFormSubmissionPayload {
+	status: TenantFormReviewStatus;
+	/** Omit to keep the current notes, null or empty string to clear them. */
+	reviewNotes?: string | null;
 }

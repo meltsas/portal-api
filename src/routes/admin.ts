@@ -37,6 +37,12 @@ import {
 	handleAdminGetTenantFormInvitations,
 	handleAdminRevokeTenantFormInvitation,
 } from '../handlers/admin/tenantFormInvitations';
+import {
+	handleAdminGetTenantFormFile,
+	handleAdminGetTenantFormSubmission,
+	handleAdminGetTenantFormSubmissions,
+	handleAdminReviewTenantFormSubmission,
+} from '../handlers/admin/tenantFormSubmissions';
 
 const guards = [requireAdmin()];
 
@@ -77,4 +83,8 @@ export const adminRoutes: Route[] = [
 	post('/api/admin/tenant-forms/invitations', handleAdminCreateTenantFormInvitation, guards),
 	get('/api/admin/tenant-forms/invitations/:id', handleAdminGetTenantFormInvitation, guards),
 	post('/api/admin/tenant-forms/invitations/:id/revoke', handleAdminRevokeTenantFormInvitation, guards),
+	get('/api/admin/tenant-forms/submissions', handleAdminGetTenantFormSubmissions, guards),
+	get('/api/admin/tenant-forms/submissions/:id', handleAdminGetTenantFormSubmission, guards),
+	put('/api/admin/tenant-forms/submissions/:id/review', handleAdminReviewTenantFormSubmission, guards),
+	get('/api/admin/tenant-forms/files/:fileId', handleAdminGetTenantFormFile, guards),
 ];
