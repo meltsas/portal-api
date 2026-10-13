@@ -10,13 +10,13 @@ import type {
 import type { GoogleIdTokenPayload } from '../../src/utils/googleAuth';
 import { signSession } from '../../src/utils/session';
 import { verifyTenantFormToken } from '../../src/utils/tenantFormToken';
-import { generateInvitationToken } from '../../src/utils/tokens';
 import {
 	adminSessionCookie,
 	GOOGLE_SUB,
 	insertTestInvitation,
 	insertTestOffer,
 	isoFromNow,
+	randomInvitationToken,
 	tenantAccessToken,
 } from '../helpers';
 
@@ -71,7 +71,7 @@ describe('POST /api/tenant-forms/invitations/resolve', () => {
 	});
 
 	it.each([
-		['an unknown token', generateInvitationToken()],
+		['an unknown token', randomInvitationToken()],
 		['a malformed token', 'short'],
 		['a missing token', undefined],
 	])('returns 404 for %s', async (_label, token) => {
@@ -175,7 +175,7 @@ describe('POST /api/tenant-forms/auth/google', () => {
 	it('validates the body', async () => {
 		const { token } = await insertTestInvitation();
 		expect((await signIn(fakeGoogle(), { token })).status).toBe(400);
-		expect((await signIn(fakeGoogle(), { token: generateInvitationToken(), googleIdToken: 'x' })).status).toBe(404);
+		expect((await signIn(fakeGoogle(), { token: randomInvitationToken(), googleIdToken: 'x' })).status).toBe(404);
 	});
 
 	it('is wired to the real route, which rejects a token that is not a JWT', async () => {

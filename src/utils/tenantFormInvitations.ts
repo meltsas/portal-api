@@ -3,7 +3,7 @@ import type { TenantFormInvitationAccessRow } from '../types/db';
 import { jsonResponse } from './response';
 import { hashInvitationToken } from './tokens';
 
-// generateInvitationToken() output: 32 bytes as base64url.
+// deriveInvitationToken() output: 32 bytes as base64url.
 const INVITATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 const ACCESS_SELECT = `

@@ -2,15 +2,23 @@ import type { RouteHandler } from '../../router/types';
 import type {
 	CreateTenantFormInvitationPayload,
 	CreateTenantFormInvitationResponse,
+	TenantFormInvitationLinkResponse,
 	TenantFormInvitationStatus,
 } from '../../types/api';
-import type { FormEventRow, FormInvitationWithJoinsRow, FormTemplateRow, OfferRow, LeadRow } from '../../types/db';
+import type {
+	FormEventRow,
+	FormInvitationRow,
+	FormInvitationWithJoinsRow,
+	FormTemplateRow,
+	LeadRow,
+	OfferRow,
+} from '../../types/db';
 import { toAdminTenantFormEvent, toAdminTenantFormInvitation } from '../../mappers/tenantForms';
 import { requireAuth } from '../../middleware/requireAuth';
 import { toIsoSeconds } from '../../utils/date';
 import { FORM_LANGUAGES, isFormLanguage } from '../../utils/formSchema';
-import { formEventStatement } from '../../utils/tenantFormInvitations';
-import { generateInvitationToken, hashInvitationToken } from '../../utils/tokens';
+import { deriveInvitationStatus, formEventStatement } from '../../utils/tenantFormInvitations';
+import { deriveInvitationToken, hashInvitationToken } from '../../utils/tokens';
 import { badRequest, jsonResponse, notFound, parseJsonBody } from '../../utils/response';
 
 const TENANT_FORM_TEMPLATE_KEY = 'tenant_details';
@@ -95,7 +103,7 @@ export const handleAdminCreateTenantFormInvitation: RouteHandler = async ({ env,
 	}
 
 	const id = crypto.randomUUID();
-	const token = generateInvitationToken();
+	const token = await deriveInvitationToken(id, env.TENANT_LINK_SECRET);
 	const tokenHash = await hashInvitationToken(token);
 	const expiresAt = toIsoSeconds(new Date(Date.now() + validDays * MS_PER_DAY));
 
@@ -181,6 +189,40 @@ export const handleAdminGetTenantFormInvitation: RouteHandler = async ({ env, pa
 		...toAdminTenantFormInvitation(row, toIsoSeconds(new Date())),
 		events: events.results.map(toAdminTenantFormEvent),
 	});
+};
+
+/**
+ * Recomputes the link of an open invitation from its id. Every reveal is logged. Invitations
+ * whose token was not derived with the current TENANT_LINK_SECRET (created before links were
+ * derived, or after a secret rotation) keep working for the tenant but cannot be shown again.
+ */
+export const handleAdminGetTenantFormInvitationLink: RouteHandler = async ({ env, request, params }) => {
+	const admin = await requireAuth(request, env);
+	if (!admin) {
+		return jsonResponse({ error: 'Unauthorized' }, 401);
+	}
+
+	const invitation = await env.portal_db
+		.prepare(`SELECT id, status, expires_at, token_hash FROM form_invitations WHERE id = ?`)
+		.bind(params.id)
+		.first<Pick<FormInvitationRow, 'id' | 'status' | 'expires_at' | 'token_hash'>>();
+	if (!invitation) {
+		return notFound();
+	}
+
+	const status = deriveInvitationStatus(invitation.status, invitation.expires_at, toIsoSeconds(new Date()));
+	if (status !== 'pending' && status !== 'opened') {
+		return jsonResponse({ error: `The link no longer works because the invitation is ${status}`, status }, 409);
+	}
+
+	const token = await deriveInvitationToken(invitation.id, env.TENANT_LINK_SECRET);
+	if ((await hashInvitationToken(token)) !== invitation.token_hash) {
+		return jsonResponse({ error: 'This link cannot be shown again. Revoke the invitation and create a new one.' }, 409);
+	}
+
+	await adminEvent(env, invitation.id, 'link_viewed', admin.email, null).run();
+	const response: TenantFormInvitationLinkResponse = { url: buildInvitationUrl(env.TENANT_FORM_URL_BASE, token) };
+	return jsonResponse(response);
 };
 
 // Only an invitation that has not been submitted can be revoked. Revoking never deletes data.

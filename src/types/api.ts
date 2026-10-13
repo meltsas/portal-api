@@ -540,7 +540,11 @@ export interface CreateTenantFormInvitationPayload {
 
 export interface CreateTenantFormInvitationResponse {
 	invitation: AdminTenantFormInvitation;
-	/** Contains the raw token. Returned only here and never stored. */
+	/** Contains the token. Never stored; GET …/invitations/:id/link recomputes it. */
+	url: string;
+}
+
+export interface TenantFormInvitationLinkResponse {
 	url: string;
 }
 

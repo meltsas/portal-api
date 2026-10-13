@@ -7,6 +7,8 @@ export default defineWorkersConfig(async () => {
 	return {
 		test: {
 			setupFiles: ["./test/apply-migrations.ts"],
+			// The default 5 s was exceeded by R2/D1 tests when all files run in parallel on Windows.
+			testTimeout: 15_000,
 			poolOptions: {
 				workers: {
 					wrangler: { configPath: "./wrangler.jsonc" },

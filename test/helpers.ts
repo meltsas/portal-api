@@ -2,7 +2,8 @@ import { env } from 'cloudflare:test';
 import { ADMIN_EMAILS } from '../src/utils/adminAllowlist';
 import { signSession } from '../src/utils/session';
 import { signTenantFormToken } from '../src/utils/tenantFormToken';
-import { generateInvitationToken } from '../src/utils/tokens';
+import { base64UrlEncode } from '../src/utils/base64url';
+import { deriveInvitationToken } from '../src/utils/tokens';
 
 export const ADMIN_EMAIL = [...ADMIN_EMAILS][0];
 
@@ -37,12 +38,14 @@ export interface TestInvitationOptions {
 	expiresAt?: string;
 	language?: string;
 	googleSubject?: string | null;
+	/** Defaults to the token derived from the id, like the admin endpoint creates it. */
+	token?: string;
 }
 
 /** Inserts an invitation for the test offer and returns its id and raw token. */
 export async function insertTestInvitation(options: TestInvitationOptions = {}): Promise<{ id: string; token: string }> {
 	const id = crypto.randomUUID();
-	const token = generateInvitationToken();
+	const token = options.token ?? (await deriveInvitationToken(id, env.TENANT_LINK_SECRET));
 	const googleSubject = options.googleSubject ?? null;
 	await env.portal_db
 		.prepare(
@@ -77,4 +80,9 @@ export function tenantAccessToken(
 		},
 		options.secret ?? env.TENANT_FORM_SECRET
 	);
+}
+
+/** A well-formed token that matches no invitation. */
+export function randomInvitationToken(): string {
+	return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
 }

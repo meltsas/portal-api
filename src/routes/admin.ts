@@ -38,6 +38,7 @@ import {
 import {
 	handleAdminCreateTenantFormInvitation,
 	handleAdminGetTenantFormInvitation,
+	handleAdminGetTenantFormInvitationLink,
 	handleAdminGetTenantFormInvitations,
 	handleAdminRevokeTenantFormInvitation,
 } from '../handlers/admin/tenantFormInvitations';
@@ -87,6 +88,7 @@ export const adminRoutes: Route[] = [
 	get('/api/admin/tenant-forms/invitations', handleAdminGetTenantFormInvitations, guards),
 	post('/api/admin/tenant-forms/invitations', handleAdminCreateTenantFormInvitation, guards),
 	get('/api/admin/tenant-forms/invitations/:id', handleAdminGetTenantFormInvitation, guards),
+	get('/api/admin/tenant-forms/invitations/:id/link', handleAdminGetTenantFormInvitationLink, guards),
 	post('/api/admin/tenant-forms/invitations/:id/revoke', handleAdminRevokeTenantFormInvitation, guards),
 	get('/api/admin/tenant-forms/submissions', handleAdminGetTenantFormSubmissions, guards),
 	get('/api/admin/tenant-forms/submissions/:id', handleAdminGetTenantFormSubmission, guards),

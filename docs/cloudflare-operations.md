@@ -480,6 +480,7 @@ Selle Workeri secretid:
 | `GITHUB_TOKEN` | SSG repo andmete export | export peatub, kuni uus token on seatud |
 | `SESSION_SECRET` | admini `session` cookie HMAC allkiri | kõik adminid logitakse välja |
 | `TENANT_FORM_SECRET` | tenant formi lühiajalise access tokeni allkiri (eraldi admini omast) | pooleli olevad vormitäitjad peavad uuesti Google'iga sisse logima |
+| `TENANT_LINK_SECRET` | invitationi lingi tokeni tuletamine id-st, et admin saaks lingi uuesti näha | juba saadetud lingid töötavad edasi, aga adminile ei saa neid enam uuesti näidata (uued invitationid töötavad normaalselt) |
 
 `SESSION_SECRET` oli kuni 2026-10-13 `wrangler.jsonc` `vars`-is ja seega gitis. Samal päeval viidi
 see secretiks ja roteeriti, vana väärtus enam ei kehti. Ära lisa seda tagasi `vars`-i.
@@ -490,7 +491,7 @@ Uue juhusliku väärtuse saab genereerida nii, et see ei jää terminali ega she
 node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64url'))" | npx wrangler secret put SESSION_SECRET
 ```
 
-Lokaalselt peavad `SESSION_SECRET` ja `TENANT_FORM_SECRET` olema `.dev.vars` failis (vt
+Lokaalselt peavad `SESSION_SECRET`, `TENANT_FORM_SECRET` ja `TENANT_LINK_SECRET` olema `.dev.vars` failis (vt
 `.dev.vars.example`). Kasuta toodangust erinevaid väärtusi.
 
 Tenant formi tavaline muutuja (mitte secret) on `TENANT_FORM_URL_BASE`, invitationi lingi baasaadress:

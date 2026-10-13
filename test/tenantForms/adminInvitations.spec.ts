@@ -55,6 +55,7 @@ describe('admin tenant form routes', () => {
 		['POST', '/invitations'],
 		['GET', '/invitations/some-id'],
 		['POST', '/invitations/some-id/revoke'],
+		['GET', '/invitations/some-id/link'],
 	])('%s %s returns 401 without a session', async (method, path) => {
 		const response = await SELF.fetch(`${API}${path}`, { method });
 		expect(response.status).toBe(401);
@@ -188,6 +189,58 @@ describe('GET /api/admin/tenant-forms/invitations/:id', () => {
 	it('returns 404 for an unknown id', async () => {
 		const response = await adminFetch('/invitations/no-such-id');
 		expect(response.status).toBe(404);
+	});
+});
+
+describe('GET /api/admin/tenant-forms/invitations/:id/link', () => {
+	it('shows the same link again and logs every reveal', async () => {
+		const { invitation, url } = await createValidInvitation();
+
+		const response = await adminFetch(`/invitations/${invitation.id}/link`);
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ url });
+
+		const events = await env.portal_db
+			.prepare(`SELECT event_type, actor_ref FROM form_events WHERE invitation_id = ? ORDER BY created_at, rowid`)
+			.bind(invitation.id)
+			.all();
+		expect(events.results).toEqual([
+			{ event_type: 'invitation_created', actor_ref: ADMIN_EMAIL },
+			{ event_type: 'link_viewed', actor_ref: ADMIN_EMAIL },
+		]);
+	});
+
+	it('still stores only the token hash', async () => {
+		const { invitation, url } = await createValidInvitation();
+		const token = url.slice(env.TENANT_FORM_URL_BASE.length);
+		const row = await env.portal_db
+			.prepare(`SELECT * FROM form_invitations WHERE id = ?`)
+			.bind(invitation.id)
+			.first<Record<string, unknown>>();
+		expect(row?.token_hash).toBe(await sha256Hex(token));
+		expect(JSON.stringify(row)).not.toContain(token);
+	});
+
+	it.each([
+		['revoked', 'revoked', isoFromNow(DAY_MS)],
+		['submitted', 'submitted', isoFromNow(DAY_MS)],
+		['expired', 'pending', isoFromNow(-DAY_MS)],
+	])('does not show the link of a %s invitation', async (expected, status, expiresAt) => {
+		await insertInvitation('inv_closed', status, expiresAt);
+		const response = await adminFetch('/invitations/inv_closed/link');
+		expect(response.status).toBe(409);
+		expect(await response.json()).toMatchObject({ status: expected });
+	});
+
+	it('cannot show a link whose token was not derived from the id', async () => {
+		await insertInvitation('inv_random_token', 'pending', isoFromNow(DAY_MS));
+		const response = await adminFetch('/invitations/inv_random_token/link');
+		expect(response.status).toBe(409);
+		expect(((await response.json()) as { error: string }).error).toContain('cannot be shown again');
+	});
+
+	it('returns 404 for an unknown id', async () => {
+		expect((await adminFetch('/invitations/no-such-id/link')).status).toBe(404);
 	});
 });
 

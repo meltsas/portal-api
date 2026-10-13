@@ -1651,8 +1651,9 @@ Template valitakse serveris (aktiivne `tenant_details`, suurim versioon).
 { "invitation": { "id": "…", "status": "pending", "expiresAt": "…", "…": "…" }, "url": "https://costaseasons.com/tenant-details/<token>" }
 ```
 
-`url` (koos raw tokeniga) tagastatakse **ainult siin**. Hiljem seda näha ei saa, sest D1-s on ainult
-hash. Baasaadress tuleb muutujast `TENANT_FORM_URL_BASE`.
+Token on `HMAC-SHA256(TENANT_LINK_SECRET, "tenant-form-invitation:" + id)` base64url-ina (43 märki).
+D1-s on ainult selle SHA-256 hash, seega ainult D1 andmetest linki taastada ei saa. Admin saab lingi
+hiljem uuesti `GET …/invitations/:id/link` kaudu. Baasaadress tuleb muutujast `TENANT_FORM_URL_BASE`.
 
 **Response 400:** valideerimisviga või tundmatu offer/lead.
 
@@ -1669,6 +1670,24 @@ Iga rida (`AdminTenantFormInvitation`): `id`, `templateId`, `displayName`, `offe
 
 Sama rida koos `events` ajajoonega (`eventType`, `actorType`, `actorRef`, `submissionId`, `fileId`,
 `metadata`, `createdAt`). **404** tundmatu id korral.
+
+### `GET /api/admin/tenant-forms/invitations/:id/link`
+
+Arvutab avatud invitationi lingi id põhjal uuesti. Iga vaatamine kirjutab sündmuse `link_viewed`.
+
+**Response 200:**
+
+```json
+{ "url": "https://costaseasons.com/tenant-details/<token>" }
+```
+
+**Response 409:**
+
+- invitation on `expired`, `revoked` või `submitted` (`{ "error": "...", "status": "revoked" }`), sest link ei tööta enam;
+- token pole tuletatud praeguse `TENANT_LINK_SECRET`-iga (invitation loodi enne tuletatud linke või
+  pärast secreti roteerimist). Huvilise jaoks link töötab, aga adminile seda uuesti näidata ei saa.
+
+**Response 404:** tundmatu id.
 
 ### `POST /api/admin/tenant-forms/invitations/:id/revoke`
 
@@ -1794,8 +1813,9 @@ kaudu blob'iks.
 | `GET`    | `/api/admin/tenant-forms/templates/:id`           | admin  | Template'i struktuur ja kõik tekstid           |
 | `PUT`    | `/api/admin/tenant-forms/templates/:id/translations` | admin | Muuda tekste ja tõlkeid (kõik või mitte midagi) |
 | `GET`    | `/api/admin/tenant-forms/invitations`             | admin  | Invitationite list (filter: `?status=`, `?offerId=`) |
-| `POST`   | `/api/admin/tenant-forms/invitations`             | admin  | Loo invitation (link tagastatakse ainult siin) |
+| `POST`   | `/api/admin/tenant-forms/invitations`             | admin  | Loo invitation (vastuses link)                 |
 | `GET`    | `/api/admin/tenant-forms/invitations/:id`         | admin  | Invitation + sündmuste ajajoon                 |
+| `GET`    | `/api/admin/tenant-forms/invitations/:id/link`    | admin  | Näita avatud invitationi linki uuesti (logitakse) |
 | `POST`   | `/api/admin/tenant-forms/invitations/:id/revoke`  | admin  | Tühista saatmata invitation                    |
 | `GET`    | `/api/admin/tenant-forms/submissions`             | admin  | Saadetud vormide list (filter: `?status=`, `?offerId=`) |
 | `GET`    | `/api/admin/tenant-forms/submissions/:id`         | admin  | Vastused EN siltidega (logitakse)              |
