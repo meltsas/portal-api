@@ -128,6 +128,21 @@ CREATE INDEX IF NOT EXISTS idx_form_invitations_lead_id
 
 
 -- =========================================================
+-- FORM DRAFTS
+-- Unfinished answers, saved so the tenant can continue later.
+-- Deleted on submit; drafts of expired/revoked invitations are
+-- removed by the retention cleanup.
+-- =========================================================
+
+CREATE TABLE IF NOT EXISTS form_drafts (
+    invitation_id TEXT PRIMARY KEY,
+    values_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (invitation_id) REFERENCES form_invitations(id) ON DELETE CASCADE
+);
+
+
+-- =========================================================
 -- FORM SUBMISSIONS
 -- values_json holds field_key -> value. Name and dates are copied
 -- into columns for listing.

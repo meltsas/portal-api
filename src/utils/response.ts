@@ -27,3 +27,20 @@ export async function parseJsonBody<T = unknown>(request: Request): Promise<T | 
 		return null;
 	}
 }
+
+/**
+ * Like parseJsonBody, but answers 413 for a body over `maxBytes` and 400 for invalid JSON.
+ */
+export async function parseJsonBodyWithLimit<T = unknown>(request: Request, maxBytes: number): Promise<{ body: T } | Response> {
+	const tooLarge = () => jsonResponse({ error: 'Request body is too large' }, 413);
+	if (Number(request.headers.get('Content-Length') ?? '0') > maxBytes) return tooLarge();
+
+	const text = await request.text();
+	if (new TextEncoder().encode(text).byteLength > maxBytes) return tooLarge();
+
+	try {
+		return { body: JSON.parse(text) as T };
+	} catch {
+		return badRequest('Invalid or missing JSON body');
+	}
+}

@@ -9,58 +9,21 @@ import type {
 } from '../../src/types/api';
 import type { GoogleIdTokenPayload } from '../../src/utils/googleAuth';
 import { signSession } from '../../src/utils/session';
-import { signTenantFormToken, verifyTenantFormToken } from '../../src/utils/tenantFormToken';
+import { verifyTenantFormToken } from '../../src/utils/tenantFormToken';
 import { generateInvitationToken } from '../../src/utils/tokens';
-import { adminSessionCookie, isoFromNow, sha256Hex } from '../helpers';
+import {
+	adminSessionCookie,
+	GOOGLE_SUB,
+	insertTestInvitation,
+	insertTestOffer,
+	isoFromNow,
+	tenantAccessToken,
+} from '../helpers';
 
 const API = 'https://example.com/api/tenant-forms';
-const OFFER_ID = 'offer_test';
 const DAY_MS = 86_400_000;
-const GOOGLE_SUB = 'google-sub-1';
 
-interface InvitationOptions {
-	status?: string;
-	expiresAt?: string;
-	language?: string;
-	googleSubject?: string | null;
-}
-
-interface SeededInvitation {
-	id: string;
-	token: string;
-}
-
-beforeEach(async () => {
-	await env.portal_db
-		.prepare(`INSERT INTO offers (id, slug, title, status) VALUES (?, 'test-offer', 'Test offer', 'active')`)
-		.bind(OFFER_ID)
-		.run();
-});
-
-async function insertInvitation(options: InvitationOptions = {}): Promise<SeededInvitation> {
-	const id = crypto.randomUUID();
-	const token = generateInvitationToken();
-	const googleSubject = options.googleSubject ?? null;
-	await env.portal_db
-		.prepare(
-			`INSERT INTO form_invitations
-			 (id, template_id, token_hash, display_name, offer_id, language, status, expires_at,
-			  google_subject, google_email, created_by_email)
-			 VALUES (?, 'tenant_details_v1', ?, 'Test Example', ?, ?, ?, ?, ?, ?, 'admin@example.com')`
-		)
-		.bind(
-			id,
-			await sha256Hex(token),
-			OFFER_ID,
-			options.language ?? 'sv',
-			options.status ?? 'pending',
-			options.expiresAt ?? isoFromNow(DAY_MS),
-			googleSubject,
-			googleSubject ? 'tenant@example.com' : null
-		)
-		.run();
-	return { id, token };
-}
+beforeEach(insertTestOffer);
 
 function invitationRow(id: string) {
 	return env.portal_db
@@ -87,7 +50,7 @@ function postJson(path: string, body: unknown): Promise<Response> {
 
 describe('POST /api/tenant-forms/invitations/resolve', () => {
 	it('opens a pending invitation once', async () => {
-		const { id, token } = await insertInvitation();
+		const { id, token } = await insertTestInvitation();
 
 		const response = await postJson('/invitations/resolve', { token });
 		expect(response.status).toBe(200);
@@ -125,7 +88,7 @@ describe('POST /api/tenant-forms/invitations/resolve', () => {
 		['revoked', { status: 'revoked' }, 410],
 		['submitted', { status: 'submitted' }, 409],
 	])('reports a %s invitation', async (expectedStatus, options, httpStatus) => {
-		const { token } = await insertInvitation(options);
+		const { token } = await insertTestInvitation(options);
 		const response = await postJson('/invitations/resolve', { token });
 		expect(response.status).toBe(httpStatus);
 		expect(await response.json()).toMatchObject({ status: expectedStatus });
@@ -154,7 +117,7 @@ describe('POST /api/tenant-forms/auth/google', () => {
 	}
 
 	it('binds the invitation to the first Google account and issues an access token', async () => {
-		const { id, token } = await insertInvitation();
+		const { id, token } = await insertTestInvitation();
 
 		const response = await signIn(fakeGoogle(), { token, googleIdToken: 'google-jwt' });
 		expect(response.status).toBe(200);
@@ -172,12 +135,12 @@ describe('POST /api/tenant-forms/auth/google', () => {
 	});
 
 	it('lets the same Google account sign in again', async () => {
-		const { token } = await insertInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
+		const { token } = await insertTestInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
 		expect((await signIn(fakeGoogle(), { token, googleIdToken: 'google-jwt' })).status).toBe(200);
 	});
 
 	it('rejects another Google account once the invitation is bound', async () => {
-		const { id, token } = await insertInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
+		const { id, token } = await insertTestInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
 
 		const response = await signIn(fakeGoogle({ sub: 'someone-else' }), { token, googleIdToken: 'google-jwt' });
 		expect(response.status).toBe(403);
@@ -188,14 +151,14 @@ describe('POST /api/tenant-forms/auth/google', () => {
 	});
 
 	it('rejects an unverified Google email without binding', async () => {
-		const { id, token } = await insertInvitation();
+		const { id, token } = await insertTestInvitation();
 		const response = await signIn(fakeGoogle({ emailVerified: false }), { token, googleIdToken: 'google-jwt' });
 		expect(response.status).toBe(401);
 		expect((await invitationRow(id))?.google_subject).toBeNull();
 	});
 
 	it('rejects a Google token that fails verification', async () => {
-		const { token } = await insertInvitation();
+		const { token } = await insertTestInvitation();
 		const verify = vi.fn(async () => {
 			throw new Error('bad signature');
 		});
@@ -203,37 +166,26 @@ describe('POST /api/tenant-forms/auth/google', () => {
 	});
 
 	it('does not call Google for an expired invitation', async () => {
-		const { token } = await insertInvitation({ expiresAt: isoFromNow(-DAY_MS) });
+		const { token } = await insertTestInvitation({ expiresAt: isoFromNow(-DAY_MS) });
 		const verify = fakeGoogle();
 		expect((await signIn(verify, { token, googleIdToken: 'google-jwt' })).status).toBe(410);
 		expect(verify).not.toHaveBeenCalled();
 	});
 
 	it('validates the body', async () => {
-		const { token } = await insertInvitation();
+		const { token } = await insertTestInvitation();
 		expect((await signIn(fakeGoogle(), { token })).status).toBe(400);
 		expect((await signIn(fakeGoogle(), { token: generateInvitationToken(), googleIdToken: 'x' })).status).toBe(404);
 	});
 
 	it('is wired to the real route, which rejects a token that is not a JWT', async () => {
-		const { token } = await insertInvitation();
+		const { token } = await insertTestInvitation();
 		const response = await postJson('/auth/google', { token, googleIdToken: 'not-a-jwt' });
 		expect(response.status).toBe(401);
 	});
 });
 
 describe('GET /api/tenant-forms/form', () => {
-	function accessToken(invitationId: string, options: { subject?: string; expInSeconds?: number; secret?: string } = {}) {
-		return signTenantFormToken(
-			{
-				invitationId,
-				subject: options.subject ?? GOOGLE_SUB,
-				exp: Math.floor(Date.now() / 1000) + (options.expInSeconds ?? 3600),
-			},
-			options.secret ?? env.TENANT_FORM_SECRET
-		);
-	}
-
 	function getForm(authorization?: string, cookie?: string): Promise<Response> {
 		const headers: Record<string, string> = {};
 		if (authorization) headers.Authorization = authorization;
@@ -248,9 +200,9 @@ describe('GET /api/tenant-forms/form', () => {
 	}
 
 	it('returns the form in the invitation language with variables filled in', async () => {
-		const { id } = await insertInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
+		const { id } = await insertTestInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
 
-		const response = await getForm(`Bearer ${await accessToken(id)}`);
+		const response = await getForm(`Bearer ${await tenantAccessToken(id)}`);
 		expect(response.status).toBe(200);
 		const schema = (await response.json()) as TenantFormSchemaResponse;
 
@@ -269,29 +221,29 @@ describe('GET /api/tenant-forms/form', () => {
 	});
 
 	it('falls back to English for texts missing in the invitation language', async () => {
-		const { id } = await insertInvitation({ status: 'opened', googleSubject: GOOGLE_SUB, language: 'no' });
+		const { id } = await insertTestInvitation({ status: 'opened', googleSubject: GOOGLE_SUB, language: 'no' });
 		await env.portal_db
 			.prepare(`INSERT INTO form_translations (template_id, language, text_key, text) VALUES ('tenant_details_v1', 'no', ?, ?)`)
 			.bind('section.stay.title', 'Reise og opphold')
 			.run();
 
-		const schema = (await (await getForm(`Bearer ${await accessToken(id)}`)).json()) as TenantFormSchemaResponse;
+		const schema = (await (await getForm(`Bearer ${await tenantAccessToken(id)}`)).json()) as TenantFormSchemaResponse;
 		expect(schema.sections[0].title).toBe('Reise og opphold');
 		expect(schema.sections[1].title).toBe('Main guest');
 	});
 
 	it('rejects requests without a valid tenant token', async () => {
-		const { id } = await insertInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
+		const { id } = await insertTestInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
 
 		expect((await getForm()).status).toBe(401);
 		expect((await getForm('Bearer not.a-token')).status).toBe(401);
-		expect((await getForm(`Bearer ${await accessToken(id, { expInSeconds: -1 })}`)).status).toBe(401);
-		expect((await getForm(`Bearer ${await accessToken(id, { subject: 'someone-else' })}`)).status).toBe(401);
-		expect((await getForm(`Bearer ${await accessToken(id, { secret: env.SESSION_SECRET })}`)).status).toBe(401);
+		expect((await getForm(`Bearer ${await tenantAccessToken(id, { expInSeconds: -1 })}`)).status).toBe(401);
+		expect((await getForm(`Bearer ${await tenantAccessToken(id, { subject: 'someone-else' })}`)).status).toBe(401);
+		expect((await getForm(`Bearer ${await tenantAccessToken(id, { secret: env.SESSION_SECRET })}`)).status).toBe(401);
 	});
 
 	it('rejects admin credentials', async () => {
-		await insertInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
+		await insertTestInvitation({ status: 'opened', googleSubject: GOOGLE_SUB });
 		const adminTokenWithTenantSecret = await signSession(
 			{ email: 'admin@example.com', exp: Math.floor(Date.now() / 1000) + 3600 },
 			env.TENANT_FORM_SECRET
@@ -306,8 +258,8 @@ describe('GET /api/tenant-forms/form', () => {
 		['submitted', { status: 'submitted' }, 409],
 		['expired', { status: 'opened', expiresAt: isoFromNow(-60_000) }, 410],
 	])('stops a valid token once the invitation is %s', async (_label, options, httpStatus) => {
-		const { id } = await insertInvitation({ googleSubject: GOOGLE_SUB, ...options });
-		expect((await getForm(`Bearer ${await accessToken(id)}`)).status).toBe(httpStatus);
+		const { id } = await insertTestInvitation({ googleSubject: GOOGLE_SUB, ...options });
+		expect((await getForm(`Bearer ${await tenantAccessToken(id)}`)).status).toBe(httpStatus);
 	});
 });
 

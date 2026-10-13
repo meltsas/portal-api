@@ -5,6 +5,7 @@ PRAGMA foreign_keys = ON;
 -- =========================================================
 
 DELETE FROM form_events;
+DELETE FROM form_drafts;
 DELETE FROM form_submission_files;
 DELETE FROM form_submissions;
 DELETE FROM form_invitations;

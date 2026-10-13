@@ -52,18 +52,22 @@ export interface FormEventInput {
 	actorType: 'admin' | 'tenant' | 'system';
 	/** Admin email or tenant Google subject. Never names, document data or file links. */
 	actorRef: string | null;
+	submissionId?: string | null;
+	fileId?: string | null;
 	metadata?: Record<string, unknown> | null;
 }
 
 export function formEventStatement(db: D1Database, event: FormEventInput): D1PreparedStatement {
 	return db
 		.prepare(
-			`INSERT INTO form_events (id, invitation_id, event_type, actor_type, actor_ref, metadata_json)
-			 VALUES (?, ?, ?, ?, ?, ?)`
+			`INSERT INTO form_events (id, invitation_id, submission_id, file_id, event_type, actor_type, actor_ref, metadata_json)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 		)
 		.bind(
 			crypto.randomUUID(),
 			event.invitationId,
+			event.submissionId ?? null,
+			event.fileId ?? null,
 			event.eventType,
 			event.actorType,
 			event.actorRef,

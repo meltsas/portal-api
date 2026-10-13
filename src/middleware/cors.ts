@@ -17,8 +17,8 @@ const ALLOWED_ORIGINS = [
 ];
 
 const ALLOWED_METHODS = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
-// Authorization carries the tenant form Bearer token.
-const ALLOWED_HEADERS = 'Content-Type, Authorization';
+// Authorization carries the tenant form Bearer token; X-Field-Key and X-File-Name describe a file upload.
+const ALLOWED_HEADERS = 'Content-Type, Authorization, X-Field-Key, X-File-Name';
 const MAX_AGE_SECONDS = '86400';
 
 const NORMALISED_ALLOWLIST: ReadonlySet<string> = new Set(ALLOWED_ORIGINS.map(stripTrailingSlash));

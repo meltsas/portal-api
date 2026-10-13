@@ -1,8 +1,10 @@
 import type {
+	FieldError,
 	FieldType,
 	FieldValidation,
 	FormLanguage,
 	FormSection,
+	FormValues,
 	TextKeySpec,
 	VisibleIf,
 } from '../utils/formSchema';
@@ -595,4 +597,39 @@ export interface TenantFormSchemaResponse {
 		successMessage: string | null;
 	};
 	sections: TenantFormSectionView[];
+	/** Saved unfinished answers, so the tenant can continue after signing in again. */
+	draft: { values: FormValues; savedAt: string } | null;
+	/** Files uploaded but not yet submitted. */
+	uploadedFiles: TenantFormUploadedFile[];
+}
+
+export interface TenantFormUploadedFile {
+	id: string;
+	fieldKey: string;
+	originalFilename: string;
+	mimeType: string;
+	sizeBytes: number;
+	uploadedAt: string;
+}
+
+export interface TenantFormUploadResponse {
+	file: TenantFormUploadedFile;
+}
+
+export interface TenantFormValuesPayload {
+	values: Record<string, unknown>;
+}
+
+export interface TenantFormDraftResponse {
+	savedAt: string;
+}
+
+export interface TenantFormSubmitResponse {
+	submissionId: string;
+	submittedAt: string;
+}
+
+export interface TenantFormValidationErrorResponse {
+	error: string;
+	errors: FieldError[];
 }

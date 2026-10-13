@@ -219,6 +219,12 @@ export interface TenantFormInvitationAccessRow
 	offer_slug: string;
 }
 
+export interface FormDraftRow {
+	invitation_id: string;
+	values_json: string;
+	updated_at: string;
+}
+
 export interface FormSubmissionRow {
 	id: string;
 	invitation_id: string;

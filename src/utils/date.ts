@@ -24,6 +24,11 @@ export function daysBetween(from: string, to: string): number {
 	return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY);
 }
 
+/** `YYYY-MM-DD` plus `days` calendar days. */
+export function addDays(date: string, days: number): string {
+	return new Date(Date.parse(`${date}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);
+}
+
 export function todayIsoDate(): string {
 	return new Date().toISOString().slice(0, 10);
 }

@@ -270,7 +270,8 @@ export type FieldErrorCode =
 	| 'too_many_items'
 	| 'too_few_files'
 	| 'too_many_files'
-	| 'duplicate_file';
+	| 'duplicate_file'
+	| 'invalid_file';
 
 export interface FieldError {
 	/** Value path, e.g. `phone`, `stay_purpose_other`, `other_guests[1].sex`. */
@@ -279,6 +280,13 @@ export interface FieldError {
 }
 
 export type FormValidationResult = { ok: true; values: FormValues } | { ok: false; errors: FieldError[] };
+
+/**
+ * `submit` enforces everything. `draft` is for saving an unfinished form: it still rejects unknown
+ * keys, wrong types, too long values and unknown options, but skips required fields, formats,
+ * minimum lengths, the minimum stay and file fields (uploaded files are tracked separately).
+ */
+export type ValidationMode = 'submit' | 'draft';
 
 const DEFAULT_MAX_LENGTH: Partial<Record<FieldType, number>> = { text: 500, textarea: 5000, email: 254, tel: 30 };
 const FREE_TEXT_MAX_LENGTH = 300;
@@ -289,31 +297,55 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^\+?[\d\s()-]+$/;
 const MIN_PHONE_DIGITS = 6;
 
+interface ValidationRun {
+	errors: FieldError[];
+	today: string;
+	mode: ValidationMode;
+}
+
 /**
- * Validates submitted values against the template structure. Unknown keys are rejected,
+ * Validates form values against the template structure. Unknown keys are rejected,
  * values of hidden fields (`visibleIf`) are dropped, strings are trimmed.
  * File values are only checked for shape and count here, ownership is checked on submit.
  */
-export function validateFormValues(structure: FormStructure, input: unknown, today: string): FormValidationResult {
+export function validateFormValues(
+	structure: FormStructure,
+	input: unknown,
+	today: string,
+	mode: ValidationMode = 'submit'
+): FormValidationResult {
 	if (!isPlainObject(input)) return { ok: false, errors: [{ field: '', code: 'invalid_type' }] };
 
 	const fields = structure.sections.flatMap((section) => section.fields);
-	const errors: FieldError[] = [];
+	const run: ValidationRun = { errors: [], today, mode };
 	const values: FormValues = {};
 
-	collectUnknownKeys(fields, input, '', errors);
+	collectUnknownKeys(fields, input, '', run.errors);
 
 	for (const field of fields) {
 		if (field.type === 'info') continue;
+		if (mode === 'draft' && field.type === 'file') continue;
 		if (field.visibleIf && !isVisible(field.visibleIf, input)) continue;
-		validateField(field, field.key, input, values, errors, today);
+		validateField(field, field.key, input, values, run);
 	}
 
-	for (const field of fields) {
-		checkMinNights(field, values, errors);
+	if (mode === 'submit') {
+		for (const field of fields) {
+			checkMinNights(field, values, run.errors);
+		}
 	}
 
-	return errors.length > 0 ? { ok: false, errors } : { ok: true, values };
+	return run.errors.length > 0 ? { ok: false, errors: run.errors } : { ok: true, values };
+}
+
+/** File ids per top-level file field in validated values, e.g. `id_documents → ['…']`. */
+export function collectFileIds(structure: FormStructure, values: FormValues): Map<string, string[]> {
+	const fileIds = new Map<string, string[]>();
+	for (const field of structure.sections.flatMap((section) => section.fields)) {
+		const value = values[field.key];
+		if (field.type === 'file' && Array.isArray(value)) fileIds.set(field.key, value as string[]);
+	}
+	return fileIds;
 }
 
 function collectUnknownKeys(fields: FormField[], input: Record<string, unknown>, pathPrefix: string, errors: FieldError[]): void {
@@ -344,31 +376,30 @@ function validateField(
 	path: string,
 	source: Record<string, unknown>,
 	target: FormValues,
-	errors: FieldError[],
-	today: string
+	run: ValidationRun
 ): void {
 	const raw = source[field.key];
 
 	if (isEmptyValue(field, raw)) {
-		if (field.required) errors.push({ field: path, code: 'required' });
+		if (field.required && run.mode === 'submit') run.errors.push({ field: path, code: 'required' });
 		return;
 	}
 
 	if (field.type === 'guest_list') {
-		validateGuestList(field, path, raw, target, errors, today);
+		validateGuestList(field, path, raw, target, run);
 		return;
 	}
 
-	const result = checkValue(field, raw, today);
+	const result = checkValue(field, raw, run);
 	if ('error' in result) {
-		errors.push({ field: path, code: result.error });
+		run.errors.push({ field: path, code: result.error });
 		return;
 	}
 	target[field.key] = result.value;
 
 	const option = field.options.find((candidate) => candidate.key === result.value);
 	if (option?.allowsFreeText) {
-		validateFreeText(field, path, source, target, errors);
+		validateFreeText(field, path, source, target, run);
 	}
 }
 
@@ -379,14 +410,14 @@ function isEmptyValue(field: FormField, raw: unknown): boolean {
 	return field.type === 'checkbox' && raw === false;
 }
 
-function checkValue(field: FormField, raw: unknown, today: string): CheckResult {
+function checkValue(field: FormField, raw: unknown, run: ValidationRun): CheckResult {
 	switch (field.type) {
 		case 'text':
 		case 'textarea':
 		case 'email':
 		case 'tel':
 		case 'date':
-			return checkString(field, raw, today);
+			return checkString(field, raw, run);
 		case 'number':
 			return checkNumber(field, raw);
 		case 'single_choice':
@@ -401,19 +432,20 @@ function checkValue(field: FormField, raw: unknown, today: string): CheckResult 
 	}
 }
 
-function checkString(field: FormField, raw: unknown, today: string): CheckResult {
+function checkString(field: FormField, raw: unknown, run: ValidationRun): CheckResult {
 	if (typeof raw !== 'string') return { error: 'invalid_type' };
 	const value = raw.trim();
 
 	const maxLength = field.validation.maxLength ?? DEFAULT_MAX_LENGTH[field.type];
 	if (maxLength !== undefined && value.length > maxLength) return { error: 'too_long' };
-	if (field.validation.minLength !== undefined && value.length < field.validation.minLength) return { error: 'too_short' };
+	if (run.mode === 'draft') return { value };
 
+	if (field.validation.minLength !== undefined && value.length < field.validation.minLength) return { error: 'too_short' };
 	if (field.type === 'email' && !EMAIL_PATTERN.test(value)) return { error: 'invalid_email' };
 	if (field.type === 'tel' && !isPhoneNumber(value)) return { error: 'invalid_phone' };
 	if (field.type === 'date') {
 		if (!isIsoDate(value)) return { error: 'invalid_date' };
-		if (field.validation.notInFuture && value > today) return { error: 'date_in_future' };
+		if (field.validation.notInFuture && value > run.today) return { error: 'date_in_future' };
 	}
 	return { value };
 }
@@ -451,42 +483,35 @@ function validateFreeText(
 	path: string,
 	source: Record<string, unknown>,
 	target: FormValues,
-	errors: FieldError[]
+	run: ValidationRun
 ): void {
 	const key = freeTextKey(field.key);
 	const errorPath = freeTextKey(path);
 	const raw = source[key];
 
 	if (isEmptyValue(field, raw)) {
-		errors.push({ field: errorPath, code: 'required' });
+		if (run.mode === 'submit') run.errors.push({ field: errorPath, code: 'required' });
 		return;
 	}
 	if (typeof raw !== 'string') {
-		errors.push({ field: errorPath, code: 'invalid_type' });
+		run.errors.push({ field: errorPath, code: 'invalid_type' });
 		return;
 	}
 	const text = raw.trim();
 	if (text.length > FREE_TEXT_MAX_LENGTH) {
-		errors.push({ field: errorPath, code: 'too_long' });
+		run.errors.push({ field: errorPath, code: 'too_long' });
 		return;
 	}
 	target[key] = text;
 }
 
-function validateGuestList(
-	field: FormField,
-	path: string,
-	raw: unknown,
-	target: FormValues,
-	errors: FieldError[],
-	today: string
-): void {
+function validateGuestList(field: FormField, path: string, raw: unknown, target: FormValues, run: ValidationRun): void {
 	if (!Array.isArray(raw)) {
-		errors.push({ field: path, code: 'invalid_type' });
+		run.errors.push({ field: path, code: 'invalid_type' });
 		return;
 	}
 	if (raw.length > (field.validation.maxItems ?? DEFAULT_MAX_ITEMS)) {
-		errors.push({ field: path, code: 'too_many_items' });
+		run.errors.push({ field: path, code: 'too_many_items' });
 		return;
 	}
 
@@ -494,13 +519,13 @@ function validateGuestList(
 	raw.forEach((rawItem: unknown, index) => {
 		const itemPath = `${path}[${index}]`;
 		if (!isPlainObject(rawItem)) {
-			errors.push({ field: itemPath, code: 'invalid_type' });
+			run.errors.push({ field: itemPath, code: 'invalid_type' });
 			return;
 		}
-		collectUnknownKeys(field.itemFields, rawItem, `${itemPath}.`, errors);
+		collectUnknownKeys(field.itemFields, rawItem, `${itemPath}.`, run.errors);
 		const item: FormValues = {};
 		for (const itemField of field.itemFields) {
-			validateField(itemField, `${itemPath}.${itemField.key}`, rawItem, item, errors, today);
+			validateField(itemField, `${itemPath}.${itemField.key}`, rawItem, item, run);
 		}
 		items.push(item);
 	});

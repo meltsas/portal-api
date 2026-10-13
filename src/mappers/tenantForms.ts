@@ -3,13 +3,21 @@ import type {
 	AdminTenantFormInvitation,
 	TenantFormFieldView,
 	TenantFormSchemaResponse,
+	TenantFormUploadedFile,
 } from '../types/api';
-import type { FormEventRow, FormInvitationWithJoinsRow, TenantFormInvitationAccessRow } from '../types/db';
+import type {
+	FormDraftRow,
+	FormEventRow,
+	FormInvitationWithJoinsRow,
+	FormSubmissionFileRow,
+	TenantFormInvitationAccessRow,
+} from '../types/db';
 import {
 	fillTextVariables,
 	type FormField,
 	type FormLanguage,
 	type FormStructure,
+	type FormValues,
 	type TextVariable,
 } from '../utils/formSchema';
 import { toISOTimestamp } from '../utils/date';
@@ -53,11 +61,28 @@ export function toAdminTenantFormEvent(row: FormEventRow): AdminTenantFormEvent 
 
 const BYTES_PER_MB = 1_048_576;
 
+export function toTenantFormUploadedFile(row: FormSubmissionFileRow): TenantFormUploadedFile {
+	return {
+		id: row.id,
+		fieldKey: row.field_key,
+		originalFilename: row.original_filename,
+		mimeType: row.mime_type,
+		sizeBytes: row.size_bytes,
+		uploadedAt: row.uploaded_at,
+	};
+}
+
+export interface TenantFormProgress {
+	draft: FormDraftRow | null;
+	uploadedFiles: FormSubmissionFileRow[];
+}
+
 export function toTenantFormSchema(
 	invitation: TenantFormInvitationAccessRow,
 	language: FormLanguage,
 	structure: FormStructure,
-	texts: Record<string, string>
+	texts: Record<string, string>,
+	progress: TenantFormProgress
 ): TenantFormSchemaResponse {
 	const invitationVariables = { offerTitle: invitation.offer_title, displayName: invitation.display_name };
 
@@ -107,6 +132,10 @@ export function toTenantFormSchema(
 			description: text(`section.${section.key}.description`),
 			fields: section.fields.map((field) => toField(field, field.key)),
 		})),
+		draft: progress.draft
+			? { values: JSON.parse(progress.draft.values_json) as FormValues, savedAt: progress.draft.updated_at }
+			: null,
+		uploadedFiles: progress.uploadedFiles.map(toTenantFormUploadedFile),
 	};
 }
 

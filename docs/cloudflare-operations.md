@@ -396,7 +396,12 @@ Kui bucket on loodud ja binding configusse lisatud, saab Worker selle kaudu fail
 
 | Bucket | Otstarve | Avalik ligipääs | Binding |
 |---|---|---|---|
-| `costa-seasons-tenant-documents` | tenant details formi dokumendifotod (isikuandmed) | **väljas**: r2.dev URL keelatud, custom domain'i pole | lisatakse tenant formi faasis 4 |
+| `costa-seasons-tenant-documents` | tenant details formi dokumendifotod (isikuandmed) | **väljas**: r2.dev URL keelatud, custom domain'i pole | `tenant_files` (`wrangler.jsonc` `r2_buckets`) |
+
+Võtmed on kujul `tenant-forms/{invitationId}/{fileId}`. Failinime võtmes ei ole, see on ainult D1
+`form_submission_files` tabelis. Lokaalselt (`wrangler dev --persist-to .wrangler/local-state`) on
+bucket simuleeritud, objekte saab vaadata `--local --persist-to .wrangler/local-state` lippudega
+`wrangler r2 object` käskudega.
 
 Dokumentide bucket peab jääma privaatseks. Faile loeb ainult Worker ja admin näeb neid autenditud
 endpointi kaudu. Kontroll:
