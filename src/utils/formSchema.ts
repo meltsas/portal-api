@@ -6,6 +6,7 @@ export type FormLanguage = (typeof FORM_LANGUAGES)[number];
 export const BASE_LANGUAGE: FormLanguage = 'en';
 
 export const TEXT_VARIABLES = ['offerTitle', 'displayName', 'maxFileSizeMb', 'maxFiles'] as const;
+export type TextVariable = (typeof TEXT_VARIABLES)[number];
 
 const FIELD_TYPES = [
 	'text',
@@ -236,6 +237,13 @@ export function findUnknownTextVariables(text: string): string[] {
 		if (!(TEXT_VARIABLES as readonly string[]).includes(name) && !unknown.includes(name)) unknown.push(name);
 	}
 	return unknown;
+}
+
+/** Replaces `{variable}` with its value. Variables without a value stay visible as written. */
+export function fillTextVariables(text: string, values: Partial<Record<TextVariable, string>>): string {
+	return text.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name: string) =>
+		Object.hasOwn(values, name) ? (values[name as TextVariable] ?? match) : match
+	);
 }
 
 // --- Value validation ---

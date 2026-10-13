@@ -1,12 +1,19 @@
-import type { AdminTenantFormEvent, AdminTenantFormInvitation, TenantFormInvitationStatus } from '../types/api';
-import type { FormEventRow, FormInvitationWithJoinsRow } from '../types/db';
+import type {
+	AdminTenantFormEvent,
+	AdminTenantFormInvitation,
+	TenantFormFieldView,
+	TenantFormSchemaResponse,
+} from '../types/api';
+import type { FormEventRow, FormInvitationWithJoinsRow, TenantFormInvitationAccessRow } from '../types/db';
+import {
+	fillTextVariables,
+	type FormField,
+	type FormLanguage,
+	type FormStructure,
+	type TextVariable,
+} from '../utils/formSchema';
 import { toISOTimestamp } from '../utils/date';
-
-/** `expired` is never stored: an open invitation past `expires_at` is reported as expired. */
-export function deriveInvitationStatus(status: string, expiresAt: string, now: string): TenantFormInvitationStatus {
-	if ((status === 'pending' || status === 'opened') && expiresAt <= now) return 'expired';
-	return status as TenantFormInvitationStatus;
-}
+import { deriveInvitationStatus } from '../utils/tenantFormInvitations';
 
 export function toAdminTenantFormInvitation(row: FormInvitationWithJoinsRow, now: string): AdminTenantFormInvitation {
 	return {
@@ -42,4 +49,72 @@ export function toAdminTenantFormEvent(row: FormEventRow): AdminTenantFormEvent 
 		metadata: row.metadata_json ? (JSON.parse(row.metadata_json) as Record<string, unknown>) : null,
 		createdAt: toISOTimestamp(row.created_at),
 	};
+}
+
+const BYTES_PER_MB = 1_048_576;
+
+export function toTenantFormSchema(
+	invitation: TenantFormInvitationAccessRow,
+	language: FormLanguage,
+	structure: FormStructure,
+	texts: Record<string, string>
+): TenantFormSchemaResponse {
+	const invitationVariables = { offerTitle: invitation.offer_title, displayName: invitation.display_name };
+
+	const text = (key: string, variables: Partial<Record<TextVariable, string>> = invitationVariables): string | null => {
+		const value = texts[key];
+		return value === undefined ? null : fillTextVariables(value, variables);
+	};
+
+	const toField = (field: FormField, path: string): TenantFormFieldView => {
+		const variables = { ...invitationVariables, ...fileLimitVariables(field) };
+		return {
+			key: field.key,
+			type: field.type,
+			required: field.required,
+			validation: field.validation,
+			visibleIf: field.visibleIf,
+			label: text(`field.${path}.label`, variables),
+			help: text(`field.${path}.help`, variables),
+			placeholder: text(`field.${path}.placeholder`, variables),
+			body: text(`field.${path}.body`, variables),
+			options: field.options.map((option) => ({
+				key: option.key,
+				label: text(`option.${path}.${option.key}`) ?? option.key,
+				allowsFreeText: option.allowsFreeText,
+			})),
+			itemFields: field.itemFields.map((itemField) => toField(itemField, `${path}.item.${itemField.key}`)),
+		};
+	};
+
+	return {
+		invitation: {
+			displayName: invitation.display_name,
+			language,
+			expiresAt: invitation.expires_at,
+			offer: { title: invitation.offer_title, slug: invitation.offer_slug },
+		},
+		prefill: { contactEmail: invitation.google_email },
+		template: {
+			id: structure.templateId,
+			title: text('template.title'),
+			intro: text('template.intro'),
+			successMessage: text('template.success_message'),
+		},
+		sections: structure.sections.map((section) => ({
+			key: section.key,
+			title: text(`section.${section.key}.title`),
+			description: text(`section.${section.key}.description`),
+			fields: section.fields.map((field) => toField(field, field.key)),
+		})),
+	};
+}
+
+function fileLimitVariables(field: FormField): Partial<Record<TextVariable, string>> {
+	const variables: Partial<Record<TextVariable, string>> = {};
+	if (field.validation.maxFiles !== undefined) variables.maxFiles = String(field.validation.maxFiles);
+	if (field.validation.maxFileBytes !== undefined) {
+		variables.maxFileSizeMb = String(Math.round(field.validation.maxFileBytes / BYTES_PER_MB));
+	}
+	return variables;
 }

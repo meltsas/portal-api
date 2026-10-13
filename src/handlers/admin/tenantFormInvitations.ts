@@ -9,6 +9,7 @@ import { toAdminTenantFormEvent, toAdminTenantFormInvitation } from '../../mappe
 import { requireAuth } from '../../middleware/requireAuth';
 import { toIsoSeconds } from '../../utils/date';
 import { FORM_LANGUAGES, isFormLanguage } from '../../utils/formSchema';
+import { formEventStatement } from '../../utils/tenantFormInvitations';
 import { generateInvitationToken, hashInvitationToken } from '../../utils/tokens';
 import { badRequest, jsonResponse, notFound, parseJsonBody } from '../../utils/response';
 
@@ -106,7 +107,7 @@ export const handleAdminCreateTenantFormInvitation: RouteHandler = async ({ env,
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 			)
 			.bind(id, template.id, tokenHash, displayName, offer.id, language, expiresAt, leadId, admin.email),
-		insertEvent(env, id, 'invitation_created', admin.email, { language, validDays }),
+		adminEvent(env, id, 'invitation_created', admin.email, { language, validDays }),
 	]);
 
 	const row = await selectInvitation(env, id);
@@ -208,7 +209,7 @@ export const handleAdminRevokeTenantFormInvitation: RouteHandler = async ({ env,
 				 WHERE id = ? AND status IN ('pending', 'opened')`
 			)
 			.bind(now, existing.id),
-		insertEvent(env, existing.id, 'revoked', admin.email, null),
+		adminEvent(env, existing.id, 'revoked', admin.email, null),
 	]);
 
 	const row = await selectInvitation(env, existing.id);
@@ -221,19 +222,14 @@ function selectInvitation(env: Env, id: string): Promise<FormInvitationWithJoins
 	return env.portal_db.prepare(`${INVITATION_SELECT} WHERE i.id = ?`).bind(id).first<FormInvitationWithJoinsRow>();
 }
 
-function insertEvent(
+function adminEvent(
 	env: Env,
 	invitationId: string,
 	eventType: string,
 	adminEmail: string,
 	metadata: Record<string, unknown> | null
 ): D1PreparedStatement {
-	return env.portal_db
-		.prepare(
-			`INSERT INTO form_events (id, invitation_id, event_type, actor_type, actor_ref, metadata_json)
-			 VALUES (?, ?, ?, 'admin', ?, ?)`
-		)
-		.bind(crypto.randomUUID(), invitationId, eventType, adminEmail, metadata ? JSON.stringify(metadata) : null);
+	return formEventStatement(env.portal_db, { invitationId, eventType, actorType: 'admin', actorRef: adminEmail, metadata });
 }
 
 function buildInvitationUrl(base: string, token: string): string {

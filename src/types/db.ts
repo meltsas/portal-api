@@ -210,6 +210,15 @@ export interface FormInvitationWithJoinsRow extends Omit<FormInvitationRow, 'tok
 	submission_id: string | null;
 }
 
+export interface TenantFormInvitationAccessRow
+	extends Pick<
+		FormInvitationRow,
+		'id' | 'template_id' | 'display_name' | 'offer_id' | 'language' | 'status' | 'expires_at' | 'google_subject' | 'google_email'
+	> {
+	offer_title: string;
+	offer_slug: string;
+}
+
 export interface FormSubmissionRow {
 	id: string;
 	invitation_id: string;

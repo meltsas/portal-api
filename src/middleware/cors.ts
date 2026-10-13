@@ -17,7 +17,8 @@ const ALLOWED_ORIGINS = [
 ];
 
 const ALLOWED_METHODS = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
-const ALLOWED_HEADERS = 'Content-Type';
+// Authorization carries the tenant form Bearer token.
+const ALLOWED_HEADERS = 'Content-Type, Authorization';
 const MAX_AGE_SECONDS = '86400';
 
 const NORMALISED_ALLOWLIST: ReadonlySet<string> = new Set(ALLOWED_ORIGINS.map(stripTrailingSlash));

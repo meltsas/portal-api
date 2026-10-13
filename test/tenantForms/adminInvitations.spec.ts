@@ -7,10 +7,9 @@ import type {
 	AdminTenantFormTemplateListItem,
 	CreateTenantFormInvitationResponse,
 } from '../../src/types/api';
-import { signSession } from '../../src/utils/session';
+import { ADMIN_EMAIL, adminSessionCookie, isoFromNow, sha256Hex } from '../helpers';
 
 const API = 'https://example.com/api/admin/tenant-forms';
-const ADMIN_EMAIL = 'admin@example.com';
 const OFFER_ID = 'offer_test';
 const DAY_MS = 86_400_000;
 
@@ -22,10 +21,9 @@ beforeEach(async () => {
 });
 
 async function adminFetch(path: string, init: RequestInit = {}): Promise<Response> {
-	const session = await signSession({ email: ADMIN_EMAIL, exp: Math.floor(Date.now() / 1000) + 3600 }, env.SESSION_SECRET);
 	return SELF.fetch(`${API}${path}`, {
 		...init,
-		headers: { 'Content-Type': 'application/json', Cookie: `session=${session}` },
+		headers: { 'Content-Type': 'application/json', Cookie: await adminSessionCookie() },
 	});
 }
 
@@ -47,15 +45,6 @@ async function insertInvitation(id: string, status: string, expiresAt: string): 
 		)
 		.bind(id, `hash-${id}`, OFFER_ID, status, expiresAt, ADMIN_EMAIL)
 		.run();
-}
-
-async function sha256Hex(value: string): Promise<string> {
-	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function isoFromNow(ms: number): string {
-	return new Date(Date.now() + ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 describe('admin tenant form routes', () => {

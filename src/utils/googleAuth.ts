@@ -17,6 +17,7 @@ function getJwks() {
 
 export interface GoogleIdTokenPayload {
 	email: string;
+	emailVerified: boolean;
 	sub: string;
 	exp: number;
 }
@@ -31,5 +32,5 @@ export async function verifyGoogleIdToken(token: string, audience: string): Prom
 		throw new Error('Google ID token missing required claims');
 	}
 
-	return { email: payload.email, sub: payload.sub, exp: payload.exp };
+	return { email: payload.email, emailVerified: payload.email_verified === true, sub: payload.sub, exp: payload.exp };
 }

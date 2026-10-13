@@ -16,8 +16,11 @@ export function requestLogger(): Middleware {
 			query[key] = value;
 		}
 
+		// Tenant form bodies hold personal data and invitation tokens, so they are never logged.
+		const mayLogBody = !path.includes('/tenant-forms/');
+
 		let body: unknown;
-		if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+		if (mayLogBody && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
 			try {
 				const text = await request.clone().text();
 				if (text.length > 0) {

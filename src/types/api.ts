@@ -1,4 +1,11 @@
-import type { FormLanguage, FormSection, TextKeySpec } from '../utils/formSchema';
+import type {
+	FieldType,
+	FieldValidation,
+	FormLanguage,
+	FormSection,
+	TextKeySpec,
+	VisibleIf,
+} from '../utils/formSchema';
 
 // -------------------------------------------------------
 // Common
@@ -515,4 +522,77 @@ export interface CreateTenantFormInvitationResponse {
 	invitation: AdminTenantFormInvitation;
 	/** Contains the raw token. Returned only here and never stored. */
 	url: string;
+}
+
+// -------------------------------------------------------
+// Public — tenant details form
+// -------------------------------------------------------
+
+export interface ResolveTenantFormInvitationPayload {
+	token: string;
+}
+
+export interface ResolveTenantFormInvitationResponse {
+	status: TenantFormInvitationStatus;
+	displayName: string;
+	offer: { title: string; slug: string };
+	language: FormLanguage;
+	expiresAt: string;
+}
+
+export interface TenantFormGoogleAuthPayload {
+	token: string;
+	googleIdToken: string;
+}
+
+export interface TenantFormGoogleAuthResponse {
+	/** Send as `Authorization: Bearer <accessToken>`. */
+	accessToken: string;
+	expiresAt: string;
+	googleEmail: string;
+}
+
+export interface TenantFormOptionView {
+	key: string;
+	label: string;
+	allowsFreeText: boolean;
+}
+
+/** Texts are in the invitation's language (English where missing), variables already filled in. */
+export interface TenantFormFieldView {
+	key: string;
+	type: FieldType;
+	required: boolean;
+	validation: FieldValidation;
+	visibleIf: VisibleIf | null;
+	label: string | null;
+	help: string | null;
+	placeholder: string | null;
+	body: string | null;
+	options: TenantFormOptionView[];
+	itemFields: TenantFormFieldView[];
+}
+
+export interface TenantFormSectionView {
+	key: string;
+	title: string | null;
+	description: string | null;
+	fields: TenantFormFieldView[];
+}
+
+export interface TenantFormSchemaResponse {
+	invitation: {
+		displayName: string;
+		language: FormLanguage;
+		expiresAt: string;
+		offer: { title: string; slug: string };
+	};
+	prefill: { contactEmail: string | null };
+	template: {
+		id: string;
+		title: string | null;
+		intro: string | null;
+		successMessage: string | null;
+	};
+	sections: TenantFormSectionView[];
 }

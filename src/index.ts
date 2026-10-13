@@ -4,6 +4,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { publicRoutes } from './routes/public';
 import { authRoutes } from './routes/auth';
 import { adminRoutes } from './routes/admin';
+import { tenantFormRoutes } from './routes/tenantForms';
 import {
 	CRON_HOURLY_FETCH,
 	CRON_SMART_GITHUB_EXPORT,
@@ -11,7 +12,7 @@ import {
 	runSmartGithubExport,
 } from './scheduled/handlers';
 
-const router = createRouter([...publicRoutes, ...authRoutes, ...adminRoutes], {
+const router = createRouter([...publicRoutes, ...authRoutes, ...adminRoutes, ...tenantFormRoutes], {
 	middleware: [requestLogger(), cors()],
 });
 

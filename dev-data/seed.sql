@@ -441,7 +441,7 @@ INSERT INTO bookings (
 -- =========================================================
 -- TENANT FORM INVITATIONS
 -- The template itself comes from migration 0010. Only the token hash is
--- stored. Raw token for local testing: dev-tenant-form-token-local-only-0001
+-- stored. Raw token for local testing: dev-tenant-form-token-for-local-testing-001
 -- =========================================================
 
 INSERT INTO form_invitations (
@@ -457,7 +457,7 @@ INSERT INTO form_invitations (
 ) VALUES (
              'invitation_001',
              'tenant_details_v1',
-             '1bf9588462d6d76f1dc42e909972802538da38a8c042049eb39019cb65dc685d',
+             'd642d8f41a0ea44dbbc7115eccc1df957e627ef9f70d30f32db02feea2972a68',
              'Test Example',
              'offer_001',
              'sv',

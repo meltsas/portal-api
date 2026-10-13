@@ -38,8 +38,6 @@ import {
 	handleAdminRevokeTenantFormInvitation,
 } from '../handlers/admin/tenantFormInvitations';
 
-// `requireAdmin()` is currently a pass-through stub — see middleware/requireAdmin.ts.
-// Wiring it up here so real authentication only requires editing the middleware itself.
 const guards = [requireAdmin()];
 
 export const adminRoutes: Route[] = [

@@ -4,12 +4,7 @@ import { verifyGoogleIdToken } from '../utils/googleAuth';
 import { signSession } from '../utils/session';
 import { buildCookie } from '../utils/cookies';
 import { requireAuth, SESSION_COOKIE_NAME } from '../middleware/requireAuth';
-
-// Hardcoded allowlist for now. Move to env / D1 once we have more than a
-// handful of admins.
-const ALLOWED_EMAILS: ReadonlySet<string> = new Set([
-	'martin.meltsas@googlemail.com',
-]);
+import { isAdminEmail } from '../utils/adminAllowlist';
 
 const SESSION_TTL_SECONDS = 60 * 60 * 24;
 
@@ -32,7 +27,7 @@ export const handleGoogleAuth: RouteHandler = async ({ request, env }) => {
 	}
 
 	const email = googlePayload.email.toLowerCase();
-	if (!ALLOWED_EMAILS.has(email)) {
+	if (!isAdminEmail(email)) {
 		console.warn('[auth] login denied for', email);
 		return jsonResponse({ error: 'Forbidden' }, 403);
 	}
