@@ -1,8 +1,6 @@
-// Augments the generated Cloudflare.Env interface in worker-configuration.d.ts
-// so that GOOGLE_CLIENT_ID and SESSION_SECRET (declared in wrangler.jsonc vars)
-// are typed without re-running `wrangler types`. Once `npm run cf-typegen` is
-// run, the regenerated file will declare the same fields with identical types,
-// which TypeScript merges without conflict.
+// Augments the generated Cloudflare.Env interface in worker-configuration.d.ts.
+// SESSION_SECRET is a Wrangler secret (`.dev.vars` locally), so `wrangler types`
+// only sees it when `.dev.vars` defines it.
 declare namespace Cloudflare {
 	interface Env {
 		GOOGLE_CLIENT_ID: string;

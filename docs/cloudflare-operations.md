@@ -392,6 +392,25 @@ npx wrangler r2 bucket list
 
 Kui bucket on loodud ja binding configusse lisatud, saab Worker selle kaudu faile lugeda/kirjutada.
 
+### Olemasolevad bucketid
+
+| Bucket | Otstarve | Avalik ligipääs | Binding |
+|---|---|---|---|
+| `costa-seasons-tenant-documents` | tenant details formi dokumendifotod (isikuandmed) | **väljas**: r2.dev URL keelatud, custom domain'i pole | lisatakse tenant formi faasis 4 |
+
+Dokumentide bucket peab jääma privaatseks. Faile loeb ainult Worker ja admin näeb neid autenditud
+endpointi kaudu. Kontroll:
+
+```bash
+npx wrangler r2 bucket dev-url get costa-seasons-tenant-documents
+```
+
+```bash
+npx wrangler r2 bucket domain list costa-seasons-tenant-documents
+```
+
+Oodatud vastused: "Public access via the r2.dev URL is disabled" ja "no custom domains".
+
 Näited võimalikest bucketitest selle projekti puhul:
 
 ```text
@@ -448,6 +467,26 @@ Kui vaja lisada teine secret:
 ```bash
 npx wrangler secret put SOME_API_TOKEN
 ```
+
+Selle Workeri secretid:
+
+| Secret | Otstarve | Roteerimise mõju |
+|---|---|---|
+| `GITHUB_TOKEN` | SSG repo andmete export | export peatub, kuni uus token on seatud |
+| `SESSION_SECRET` | admini `session` cookie HMAC allkiri | kõik adminid logitakse välja |
+| `TENANT_FORM_SECRET` | tenant formi lühiajalise access tokeni allkiri (eraldi admini omast) | pooleli olevad vormitäitjad peavad uuesti Google'iga sisse logima |
+
+`SESSION_SECRET` oli kuni 2026-10-13 `wrangler.jsonc` `vars`-is ja seega gitis. Samal päeval viidi
+see secretiks ja roteeriti, vana väärtus enam ei kehti. Ära lisa seda tagasi `vars`-i.
+
+Uue juhusliku väärtuse saab genereerida nii, et see ei jää terminali ega shelli ajalukku:
+
+```bash
+node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64url'))" | npx wrangler secret put SESSION_SECRET
+```
+
+Lokaalselt peavad `SESSION_SECRET` ja `TENANT_FORM_SECRET` olema `.dev.vars` failis (vt
+`.dev.vars.example`). Kasuta toodangust erinevaid väärtusi.
 
 Worker koodis kasutatakse neid `env` kaudu:
 
