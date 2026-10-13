@@ -3,13 +3,14 @@ import type { SubmitLeadPayload } from '../types/api';
 import type { OfferRow, LeadRow } from '../types/db';
 import { jsonResponse, badRequest, parseJsonBody } from '../utils/response';
 import { verifyGoogleIdToken } from '../utils/googleAuth';
+import { daysBetween, isIsoDate } from '../utils/date';
+import { MIN_STAY_NIGHTS } from '../utils/stay';
 
 const MAX_NAME_LENGTH = 200;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_REASON_OF_STAY_LENGTH = 300;
 const MAX_USER_AGENT_LENGTH = 1000;
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export const handleSubmitLead: RouteHandler = async ({ env, request }) => {
 	const body = await parseJsonBody<SubmitLeadPayload>(request);
@@ -31,10 +32,10 @@ export const handleSubmitLead: RouteHandler = async ({ env, request }) => {
 	if (typeof body.message !== 'string' || body.message.trim() === '') {
 		return badRequest('message is required');
 	}
-	if (typeof body.dateFrom !== 'string' || !DATE_PATTERN.test(body.dateFrom)) {
+	if (typeof body.dateFrom !== 'string' || !isIsoDate(body.dateFrom)) {
 		return badRequest('dateFrom must be YYYY-MM-DD');
 	}
-	if (typeof body.dateTo !== 'string' || !DATE_PATTERN.test(body.dateTo)) {
+	if (typeof body.dateTo !== 'string' || !isIsoDate(body.dateTo)) {
 		return badRequest('dateTo must be YYYY-MM-DD');
 	}
 
@@ -50,8 +51,8 @@ export const handleSubmitLead: RouteHandler = async ({ env, request }) => {
 	if (message.length > MAX_MESSAGE_LENGTH) {
 		return badRequest(`message must be at most ${MAX_MESSAGE_LENGTH} characters`);
 	}
-	if (dateFrom > dateTo) {
-		return badRequest('dateFrom must not be after dateTo');
+	if (daysBetween(dateFrom, dateTo) < MIN_STAY_NIGHTS) {
+		return badRequest(`stay must be at least ${MIN_STAY_NIGHTS} nights`);
 	}
 
 	// --- Optional reasonOfStay ---

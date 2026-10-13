@@ -135,3 +135,123 @@ export interface GithubExportStateRow {
 	created_at: string;
 	updated_at: string;
 }
+
+export interface FormTemplateRow {
+	id: string;
+	template_key: string;
+	version: number;
+	base_language: string;
+	status: string;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface FormSectionRow {
+	id: string;
+	template_id: string;
+	section_key: string;
+	sort_order: number;
+}
+
+export interface FormFieldRow {
+	id: string;
+	template_id: string;
+	section_id: string;
+	parent_field_id: string | null;
+	field_key: string;
+	field_type: string;
+	is_required: number;
+	sort_order: number;
+	validation_json: string;
+	visible_if_json: string | null;
+}
+
+export interface FormFieldOptionRow {
+	id: string;
+	field_id: string;
+	option_key: string;
+	sort_order: number;
+	allows_free_text: number;
+}
+
+export interface FormTranslationRow {
+	template_id: string;
+	language: string;
+	text_key: string;
+	text: string;
+	updated_at: string;
+	updated_by_email: string | null;
+}
+
+export interface FormInvitationRow {
+	id: string;
+	template_id: string;
+	token_hash: string;
+	display_name: string;
+	offer_id: string;
+	language: string;
+	status: string;
+	expires_at: string;
+	google_subject: string | null;
+	google_email: string | null;
+	lead_id: string | null;
+	created_by_email: string;
+	opened_at: string | null;
+	authenticated_at: string | null;
+	submitted_at: string | null;
+	revoked_at: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface FormSubmissionRow {
+	id: string;
+	invitation_id: string;
+	template_id: string;
+	language: string;
+	google_subject: string;
+	google_email: string;
+	contact_email: string;
+	phone: string;
+	full_name: string;
+	planned_arrival: string | null;
+	planned_departure: string | null;
+	values_json: string;
+	status: string;
+	reviewed_by_email: string | null;
+	reviewed_at: string | null;
+	review_notes: string | null;
+	documents_delete_after: string | null;
+	documents_deleted_at: string | null;
+	remote_ip: string | null;
+	user_agent: string | null;
+	submitted_at: string;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface FormSubmissionFileRow {
+	id: string;
+	invitation_id: string;
+	submission_id: string | null;
+	field_key: string;
+	r2_key: string;
+	original_filename: string;
+	mime_type: string;
+	size_bytes: number;
+	status: string;
+	uploaded_at: string;
+	deleted_at: string | null;
+}
+
+export interface FormEventRow {
+	id: string;
+	invitation_id: string | null;
+	submission_id: string | null;
+	file_id: string | null;
+	event_type: string;
+	actor_type: string;
+	actor_ref: string | null;
+	metadata_json: string | null;
+	created_at: string;
+}

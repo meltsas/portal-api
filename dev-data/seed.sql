@@ -4,6 +4,10 @@ PRAGMA foreign_keys = ON;
 -- OPTIONAL CLEANUP FOR RE-RUNS
 -- =========================================================
 
+DELETE FROM form_events;
+DELETE FROM form_submission_files;
+DELETE FROM form_submissions;
+DELETE FROM form_invitations;
 DELETE FROM admin_audit_logs;
 DELETE FROM generation_runs;
 DELETE FROM blog_post_images;
@@ -433,3 +437,31 @@ INSERT INTO bookings (
           '2026-05-20',
           'Past confirmed stay (NOT exported — checkout is before today)'
       );
+
+-- =========================================================
+-- TENANT FORM INVITATIONS
+-- The template itself comes from migration 0010. Only the token hash is
+-- stored. Raw token for local testing: dev-tenant-form-token-local-only-0001
+-- =========================================================
+
+INSERT INTO form_invitations (
+    id,
+    template_id,
+    token_hash,
+    display_name,
+    offer_id,
+    language,
+    status,
+    expires_at,
+    created_by_email
+) VALUES (
+             'invitation_001',
+             'tenant_details_v1',
+             '1bf9588462d6d76f1dc42e909972802538da38a8c042049eb39019cb65dc685d',
+             'Test Example',
+             'offer_001',
+             'sv',
+             'pending',
+             '2099-12-31T23:59:59Z',
+             'owner@example.com'
+         );
