@@ -30,7 +30,11 @@ import {
 	handleAdminGetExternalDataSources,
 	handleAdminRunExternalDataSource,
 } from '../handlers/admin/externalData';
-import { handleAdminGetTenantFormTemplate, handleAdminGetTenantFormTemplates } from '../handlers/admin/tenantFormTemplates';
+import {
+	handleAdminGetTenantFormTemplate,
+	handleAdminGetTenantFormTemplates,
+	handleAdminUpdateTenantFormTranslations,
+} from '../handlers/admin/tenantFormTemplates';
 import {
 	handleAdminCreateTenantFormInvitation,
 	handleAdminGetTenantFormInvitation,
@@ -79,6 +83,7 @@ export const adminRoutes: Route[] = [
 
 	get('/api/admin/tenant-forms/templates', handleAdminGetTenantFormTemplates, guards),
 	get('/api/admin/tenant-forms/templates/:id', handleAdminGetTenantFormTemplate, guards),
+	put('/api/admin/tenant-forms/templates/:id/translations', handleAdminUpdateTenantFormTranslations, guards),
 	get('/api/admin/tenant-forms/invitations', handleAdminGetTenantFormInvitations, guards),
 	post('/api/admin/tenant-forms/invitations', handleAdminCreateTenantFormInvitation, guards),
 	get('/api/admin/tenant-forms/invitations/:id', handleAdminGetTenantFormInvitation, guards),

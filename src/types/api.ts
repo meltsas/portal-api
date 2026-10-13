@@ -9,6 +9,7 @@ import type {
 	TextKeySpec,
 	VisibleIf,
 } from '../utils/formSchema';
+import type { TextChangeError } from '../utils/formTextChanges';
 
 // -------------------------------------------------------
 // Common
@@ -474,6 +475,22 @@ export interface AdminTenantFormTemplateDetail extends AdminTenantFormTemplateLi
 	textKeys: TextKeySpec[];
 	/** language → text key → text. Every supported language is present, possibly empty. */
 	texts: Record<FormLanguage, Record<string, string>>;
+}
+
+export interface TenantFormTextChange {
+	language: FormLanguage;
+	textKey: string;
+	/** Empty text removes a translation (English is shown instead) or an optional English text in every language. */
+	text: string;
+}
+
+export interface UpdateTenantFormTranslationsPayload {
+	changes: TenantFormTextChange[];
+}
+
+export interface UpdateTenantFormTranslationsErrorResponse {
+	error: string;
+	errors: TextChangeError[];
 }
 
 export interface AdminTenantFormInvitation {

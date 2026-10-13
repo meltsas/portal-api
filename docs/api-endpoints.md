@@ -1570,6 +1570,63 @@ Sama mis listi rida, lisaks `sections` (struktuur: väljad, tüübid, required, 
 `itemFields`), `textKeys` (kõik võimalikud tekstivõtmed koos `required` lipuga) ja `texts`
 (`language → text_key → text`, iga toetatud keel olemas, võib olla tühi). **404** tundmatu id korral.
 
+### `PUT /api/admin/tenant-forms/templates/:id/translations`
+
+Muudab olemasolevate tekstivõtmete tekste ning lisab või eemaldab tõlkeid. Struktuuri (väljad,
+valikud, required, järjekord) see ei muuda. Kõik muudatused kontrollitakse enne kirjutamist. Kui
+mõni on vigane, ei kirjutata ühtegi. Kehtivad muudatused lähevad ühes D1 batch'is, muutmata tekste
+ei kirjutata.
+
+**Request body (max 1 MB, kuni 500 muudatust):**
+
+```json
+{
+  "changes": [
+    { "language": "sv", "textKey": "section.stay.title", "text": "Resa och vistelse" },
+    { "language": "fi", "textKey": "section.stay.title", "text": "Matka ja oleskelu" },
+    { "language": "fi", "textKey": "field.phone.help", "text": "" }
+  ]
+}
+```
+
+Reeglid:
+
+- `textKey` peab olema template'i `textKeys` hulgas.
+- Tekst trimmitakse, `\r\n` → `\n`, kuni 5000 märki.
+- Muutujad ainult `{offerTitle}`, `{displayName}`, `{maxFileSizeMb}`, `{maxFiles}`.
+- Lingid ainult `https://`.
+- **Tühi tekst:**
+  - teises keeles → tõlge kustutatakse ja vormis kuvatakse ingliskeelne tekst;
+  - valikulise EN teksti puhul (nt `help`) → tekst kustutatakse kõigis keeltes;
+  - kohustusliku EN teksti puhul → viga.
+- Tõlkel peab olema EN tekst (olemas või samas batch'is lisatud).
+- `updated_by_email` = admini email, `updated_at` = muutmise aeg.
+
+**Response 200:** uuendatud template detail (sama kuju mis `GET …/templates/:id`).
+
+**Response 400:**
+
+```json
+{
+  "error": "Invalid text changes",
+  "errors": [{ "index": 2, "code": "unknown_variable", "variables": ["price"] }]
+}
+```
+
+Koodid:
+
+- `invalid_type` — `index: -1` puudutab kogu `changes` listi;
+- `unsupported_language`;
+- `unknown_text_key`;
+- `duplicate_change`;
+- `too_long`;
+- `unknown_variable`;
+- `invalid_link`;
+- `required_text`;
+- `missing_base_text`.
+
+**Response 404:** tundmatu template. **Response 413:** body on liiga suur.
+
 ---
 
 ### `POST /api/admin/tenant-forms/invitations`
@@ -1735,6 +1792,7 @@ kaudu blob'iks.
 | `POST`   | `/api/tenant-forms/submit`                        | tenant | Saada vorm                                     |
 | `GET`    | `/api/admin/tenant-forms/templates`               | admin  | Template'id + tõlke valmidus                   |
 | `GET`    | `/api/admin/tenant-forms/templates/:id`           | admin  | Template'i struktuur ja kõik tekstid           |
+| `PUT`    | `/api/admin/tenant-forms/templates/:id/translations` | admin | Muuda tekste ja tõlkeid (kõik või mitte midagi) |
 | `GET`    | `/api/admin/tenant-forms/invitations`             | admin  | Invitationite list (filter: `?status=`, `?offerId=`) |
 | `POST`   | `/api/admin/tenant-forms/invitations`             | admin  | Loo invitation (link tagastatakse ainult siin) |
 | `GET`    | `/api/admin/tenant-forms/invitations/:id`         | admin  | Invitation + sündmuste ajajoon                 |
