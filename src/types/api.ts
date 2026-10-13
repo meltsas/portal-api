@@ -1,3 +1,5 @@
+import type { FormLanguage, FormSection, TextKeySpec } from '../utils/formSchema';
+
 // -------------------------------------------------------
 // Common
 // -------------------------------------------------------
@@ -433,4 +435,84 @@ export interface CleanupExternalDataSnapshotsResponse {
 	deletedCount: number;
 	olderThanDays: number;
 	keepLatest: boolean;
+}
+
+// -------------------------------------------------------
+// Admin — tenant details forms
+// -------------------------------------------------------
+
+export type TenantFormInvitationStatus = 'pending' | 'opened' | 'submitted' | 'expired' | 'revoked';
+
+export interface TenantFormLanguageReadiness {
+	language: FormLanguage;
+	/** Base-language text keys that have a text in this language. */
+	translated: number;
+	total: number;
+}
+
+export interface AdminTenantFormTemplateListItem {
+	id: string;
+	templateKey: string;
+	version: number;
+	status: string;
+	baseLanguage: string;
+	languages: TenantFormLanguageReadiness[];
+}
+
+export interface AdminTenantFormTemplateDetail extends AdminTenantFormTemplateListItem {
+	sections: FormSection[];
+	textKeys: TextKeySpec[];
+	/** language → text key → text. Every supported language is present, possibly empty. */
+	texts: Record<FormLanguage, Record<string, string>>;
+}
+
+export interface AdminTenantFormInvitation {
+	id: string;
+	templateId: string;
+	displayName: string;
+	offerId: string;
+	offerTitle: string | null;
+	language: string;
+	status: TenantFormInvitationStatus;
+	expiresAt: string;
+	googleEmail: string | null;
+	leadId: string | null;
+	submissionId: string | null;
+	createdByEmail: string;
+	openedAt: string | null;
+	authenticatedAt: string | null;
+	submittedAt: string | null;
+	revokedAt: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface AdminTenantFormEvent {
+	id: string;
+	eventType: string;
+	actorType: string;
+	actorRef: string | null;
+	submissionId: string | null;
+	fileId: string | null;
+	metadata: Record<string, unknown> | null;
+	createdAt: string;
+}
+
+export interface AdminTenantFormInvitationDetail extends AdminTenantFormInvitation {
+	events: AdminTenantFormEvent[];
+}
+
+export interface CreateTenantFormInvitationPayload {
+	displayName: string;
+	offerId: string;
+	language: string;
+	/** 1–14, default 5. */
+	validDays?: number;
+	leadId?: string | null;
+}
+
+export interface CreateTenantFormInvitationResponse {
+	invitation: AdminTenantFormInvitation;
+	/** Contains the raw token. Returned only here and never stored. */
+	url: string;
 }

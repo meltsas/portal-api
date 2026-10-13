@@ -2,6 +2,8 @@
 // We use base64url so the value is safe to put in a Set-Cookie header without
 // percent-encoding. The session is self-contained — no DB lookup is required.
 
+import { base64UrlDecode, base64UrlEncode } from './base64url';
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -54,19 +56,3 @@ function importKey(secret: string): Promise<CryptoKey> {
 	);
 }
 
-function base64UrlEncode(bytes: Uint8Array): string {
-	let bin = '';
-	for (let i = 0; i < bytes.byteLength; i++) {
-		bin += String.fromCharCode(bytes[i]);
-	}
-	return btoa(bin).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
-}
-
-function base64UrlDecode(input: string): Uint8Array {
-	const padded = input.replace(/-/g, '+').replace(/_/g, '/');
-	const padding = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4));
-	const bin = atob(padded + padding);
-	const bytes = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-	return bytes;
-}

@@ -1,3 +1,4 @@
 ENVIRONMENT=development
 SESSION_SECRET=
 TENANT_FORM_SECRET=
+TENANT_FORM_URL_BASE=http://localhost:5551/tenant-details/

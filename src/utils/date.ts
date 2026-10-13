@@ -27,3 +27,8 @@ export function daysBetween(from: string, to: string): number {
 export function todayIsoDate(): string {
 	return new Date().toISOString().slice(0, 10);
 }
+
+/** `YYYY-MM-DDTHH:MM:SSZ` without milliseconds, so stored timestamps compare correctly as strings. */
+export function toIsoSeconds(date: Date): string {
+	return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}

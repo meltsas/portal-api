@@ -30,6 +30,13 @@ import {
 	handleAdminGetExternalDataSources,
 	handleAdminRunExternalDataSource,
 } from '../handlers/admin/externalData';
+import { handleAdminGetTenantFormTemplate, handleAdminGetTenantFormTemplates } from '../handlers/admin/tenantFormTemplates';
+import {
+	handleAdminCreateTenantFormInvitation,
+	handleAdminGetTenantFormInvitation,
+	handleAdminGetTenantFormInvitations,
+	handleAdminRevokeTenantFormInvitation,
+} from '../handlers/admin/tenantFormInvitations';
 
 // `requireAdmin()` is currently a pass-through stub — see middleware/requireAdmin.ts.
 // Wiring it up here so real authentication only requires editing the middleware itself.
@@ -65,4 +72,11 @@ export const adminRoutes: Route[] = [
 	post('/api/admin/external-data/sources/:id/run', handleAdminRunExternalDataSource, guards),
 	post('/api/admin/external-data/sources/:id/cleanup', handleAdminCleanupExternalDataSnapshots, guards),
 	get('/api/admin/external-data/snapshots/:id', handleAdminGetExternalDataSnapshot, guards),
+
+	get('/api/admin/tenant-forms/templates', handleAdminGetTenantFormTemplates, guards),
+	get('/api/admin/tenant-forms/templates/:id', handleAdminGetTenantFormTemplate, guards),
+	get('/api/admin/tenant-forms/invitations', handleAdminGetTenantFormInvitations, guards),
+	post('/api/admin/tenant-forms/invitations', handleAdminCreateTenantFormInvitation, guards),
+	get('/api/admin/tenant-forms/invitations/:id', handleAdminGetTenantFormInvitation, guards),
+	post('/api/admin/tenant-forms/invitations/:id/revoke', handleAdminRevokeTenantFormInvitation, guards),
 ];

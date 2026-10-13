@@ -204,6 +204,12 @@ export interface FormInvitationRow {
 	updated_at: string;
 }
 
+// token_hash and google_subject are never read for admin views.
+export interface FormInvitationWithJoinsRow extends Omit<FormInvitationRow, 'token_hash' | 'google_subject'> {
+	offer_title: string | null;
+	submission_id: string | null;
+}
+
 export interface FormSubmissionRow {
 	id: string;
 	invitation_id: string;

@@ -488,6 +488,12 @@ node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64
 Lokaalselt peavad `SESSION_SECRET` ja `TENANT_FORM_SECRET` olema `.dev.vars` failis (vt
 `.dev.vars.example`). Kasuta toodangust erinevaid väärtusi.
 
+Tenant formi tavaline muutuja (mitte secret) on `TENANT_FORM_URL_BASE`, invitationi lingi baasaadress:
+
+- toodangus `wrangler.jsonc` `vars`-is: `https://costaseasons.com/tenant-details/`;
+- lokaalselt `.dev.vars`-is: `http://localhost:5551/tenant-details/`, et dev'is loodud link avaks
+  lokaalse saidi.
+
 Worker koodis kasutatakse neid `env` kaudu:
 
 ```ts

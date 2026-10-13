@@ -17,6 +17,7 @@
 	"vars": {
 		"ENVIRONMENT": "production",
 		"GOOGLE_CLIENT_ID": "296921667290-ppud7lh91ojm5ujosof5394t13o7jtv2.apps.googleusercontent.com",
+		"TENANT_FORM_URL_BASE": "https://costaseasons.com/tenant-details/",
 
 		"GITHUB_REPO": "meltsas/non-touristic-rentals",
 		"GITHUB_EXPORT_ENABLED": true,
