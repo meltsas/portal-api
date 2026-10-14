@@ -142,13 +142,15 @@ describe('tenant_details_v1 template seed', () => {
 			.all<{ language: string; text_key: string; text: string }>();
 
 		const validKeys = new Set(listTextKeys(structure).map((spec) => spec.key));
-		const englishKeys = new Set(results.filter((row) => row.language === 'en').map((row) => row.text_key));
-		const swedishKeys = new Set(results.filter((row) => row.language === 'sv').map((row) => row.text_key));
+		const keysOf = (language: string) => results.filter((row) => row.language === language).map((row) => row.text_key).sort();
+		const englishKeys = new Set(keysOf('en'));
 
 		const missingRequired = listTextKeys(structure).filter((spec) => spec.required && !englishKeys.has(spec.key));
 		expect(missingRequired).toEqual([]);
 		expect(results.filter((row) => !validKeys.has(row.text_key)).map((row) => row.text_key)).toEqual([]);
-		expect([...englishKeys].filter((key) => !swedishKeys.has(key))).toEqual([]);
+		for (const language of FORM_LANGUAGES) {
+			expect({ language, keys: keysOf(language) }).toEqual({ language, keys: keysOf('en') });
+		}
 		expect(results.filter((row) => !(FORM_LANGUAGES as readonly string[]).includes(row.language))).toEqual([]);
 		expect(results.filter((row) => findUnknownTextVariables(row.text).length > 0)).toEqual([]);
 		expect(results.filter((row) => row.text.trim() === '' || row.text.includes('\r'))).toEqual([]);
@@ -169,8 +171,8 @@ describe('loadFormTexts', () => {
 
 	it('falls back to English per key', async () => {
 		await env.portal_db
-			.prepare(`INSERT INTO form_translations (template_id, language, text_key, text) VALUES (?, 'no', ?, ?)`)
-			.bind(TEMPLATE_ID, 'section.stay.title', 'Reise og opphold')
+			.prepare(`DELETE FROM form_translations WHERE template_id = ? AND language = 'no' AND text_key = ?`)
+			.bind(TEMPLATE_ID, 'section.main_guest.title')
 			.run();
 
 		const texts = await loadFormTexts(env.portal_db, TEMPLATE_ID, 'no');

@@ -1544,7 +1544,7 @@ Kõik route'id on `requireAdmin()` all (jaotis 6). Admini email võetakse sessio
 
 ### `GET /api/admin/tenant-forms/templates`
 
-Template'ide list koos iga toetatud keele (`en`, `sv`, `fi`, `no`) tõlke valmidusega.
+Template'ide list koos iga toetatud keele (`en`, `sv`, `fi`, `no`, `et`) tõlke valmidusega.
 
 ```json
 {
@@ -1557,7 +1557,7 @@ Template'ide list koos iga toetatud keele (`en`, `sv`, `fi`, `no`) tõlke valmid
       "baseLanguage": "en",
       "languages": [
         { "language": "en", "translated": 99, "total": 99 },
-        { "language": "fi", "translated": 0, "total": 99 }
+        { "language": "fi", "translated": 98, "total": 99 }
       ]
     }
   ]
@@ -1641,7 +1641,7 @@ Koodid:
 
 - `displayName` — kohustuslik, kuni 200 märki.
 - `offerId` — olemasolev offer.
-- `language` — `en`, `sv`, `fi` või `no`.
+- `language` — `en`, `sv`, `fi`, `no` või `et`.
 - `validDays` — täisarv 1–14, vaikimisi 5.
 - `leadId` — valikuline, olemasolev lead.
 

@@ -223,8 +223,8 @@ describe('GET /api/tenant-forms/form', () => {
 	it('falls back to English for texts missing in the invitation language', async () => {
 		const { id } = await insertTestInvitation({ status: 'opened', googleSubject: GOOGLE_SUB, language: 'no' });
 		await env.portal_db
-			.prepare(`INSERT INTO form_translations (template_id, language, text_key, text) VALUES ('tenant_details_v1', 'no', ?, ?)`)
-			.bind('section.stay.title', 'Reise og opphold')
+			.prepare(`DELETE FROM form_translations WHERE template_id = 'tenant_details_v1' AND language = 'no' AND text_key = ?`)
+			.bind('section.main_guest.title')
 			.run();
 
 		const schema = (await (await getForm(`Bearer ${await tenantAccessToken(id)}`)).json()) as TenantFormSchemaResponse;

@@ -54,28 +54,29 @@ describe('PUT /api/admin/tenant-forms/templates/:id/translations', () => {
 	it('edits texts, adds translations and returns the updated template', async () => {
 		const response = await putChanges([
 			{ language: 'sv', textKey: 'section.stay.title', text: 'Resa och vistelse' },
-			{ language: 'fi', textKey: 'section.stay.title', text: '  Matka ja oleskelu\r\n' },
+			{ language: 'fi', textKey: 'section.stay.title', text: '  Matka ja majoitus\r\n' },
 			{ language: 'en', textKey: 'field.first_name.help', text: 'As in your **passport**.' },
 		]);
 		expect(response.status).toBe(200);
 		const detail = (await response.json()) as AdminTenantFormTemplateDetail;
 
 		expect(detail.texts.sv['section.stay.title']).toBe('Resa och vistelse');
-		expect(detail.texts.fi['section.stay.title']).toBe('Matka ja oleskelu');
+		expect(detail.texts.fi['section.stay.title']).toBe('Matka ja majoitus');
 		expect(detail.texts.en['field.first_name.help']).toBe('As in your **passport**.');
-		const fi = detail.languages.find((entry) => entry.language === 'fi')!;
-		expect(fi.translated).toBe(1);
-		expect(fi.total).toBe(Object.keys(detail.texts.en).length);
+		// The new English help text has no Finnish translation yet.
+		const total = Object.keys(detail.texts.en).length;
+		expect(detail.languages.find((entry) => entry.language === 'fi')).toEqual({ language: 'fi', translated: total - 1, total });
 
-		expect(await storedText('fi', 'section.stay.title')).toEqual({ text: 'Matka ja oleskelu', updated_by_email: ADMIN_EMAIL });
+		expect(await storedText('fi', 'section.stay.title')).toEqual({ text: 'Matka ja majoitus', updated_by_email: ADMIN_EMAIL });
 	});
 
 	it('shows a translation in the form and falls back to English once it is removed', async () => {
-		await putChanges([{ language: 'fi', textKey: 'section.stay.title', text: 'Matka ja oleskelu' }]);
 		expect((await tenantForm('fi')).sections[0].title).toBe('Matka ja oleskelu');
 
 		const removed = await putChanges([{ language: 'fi', textKey: 'section.stay.title', text: '' }]);
 		expect(removed.status).toBe(200);
+		const fi = ((await removed.json()) as AdminTenantFormTemplateDetail).languages.find((entry) => entry.language === 'fi')!;
+		expect(fi.translated).toBe(fi.total - 1);
 		expect(await storedText('fi', 'section.stay.title')).toBeNull();
 		expect((await tenantForm('fi')).sections[0].title).toBe('Trip & stay');
 	});

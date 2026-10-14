@@ -291,10 +291,10 @@ describe('GET /api/admin/tenant-forms/templates', () => {
 		const readiness = Object.fromEntries(template!.languages.map((entry) => [entry.language, entry]));
 		const total = readiness.en.total;
 		expect(total).toBeGreaterThan(0);
-		expect(readiness.en.translated).toBe(total);
-		expect(readiness.sv.translated).toBe(total);
-		expect(readiness.fi).toEqual({ language: 'fi', translated: 0, total });
-		expect(readiness.no).toEqual({ language: 'no', translated: 0, total });
+		expect(Object.keys(readiness)).toEqual(['en', 'sv', 'fi', 'no', 'et']);
+		for (const entry of template!.languages) {
+			expect(entry).toEqual({ language: entry.language, translated: total, total });
+		}
 	});
 
 	it('returns structure, text keys and texts of every supported language', async () => {
@@ -304,8 +304,8 @@ describe('GET /api/admin/tenant-forms/templates', () => {
 		expect(detail.sections).toHaveLength(10);
 		expect(detail.textKeys).toContainEqual({ key: 'template.title', required: true });
 		expect(detail.texts.sv['section.stay.title']).toBe('Resa & vistelse');
-		expect(detail.texts.fi).toEqual({});
-		expect(detail.languages.find((entry) => entry.language === 'sv')?.translated).toBe(
+		expect(detail.texts.et['section.stay.title']).toBe('Reis ja peatumine');
+		expect(detail.languages.find((entry) => entry.language === 'et')?.translated).toBe(
 			Object.keys(detail.texts.en).length
 		);
 	});

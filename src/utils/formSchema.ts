@@ -1,7 +1,7 @@
 import type { FormFieldOptionRow, FormFieldRow, FormSectionRow, FormTranslationRow } from '../types/db';
 import { daysBetween, isIsoDate } from './date';
 
-export const FORM_LANGUAGES = ['en', 'sv', 'fi', 'no'] as const;
+export const FORM_LANGUAGES = ['en', 'sv', 'fi', 'no', 'et'] as const;
 export type FormLanguage = (typeof FORM_LANGUAGES)[number];
 export const BASE_LANGUAGE: FormLanguage = 'en';
 
