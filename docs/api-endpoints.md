@@ -1322,6 +1322,8 @@ Põhireeglid:
   endpointidel see ei kehti. Aegunud token → 401, seejärel uus Google login samale invitationile.
 - **Invitationi olekut kontrollitakse igal päringul:** aegunud → 410 `{ "status": "expired" }`,
   tühistatud → 410 `{ "status": "revoked" }`, juba saadetud → 409 `{ "status": "submitted" }`.
+  Kõigis neis vastustes on ka `language` (invitationi keel), et leht saaks seisu selgitada huvilise
+  keeles.
 - **Väärtused** on `field_key → value`, valikud `option_key`-dena. Kaaskülaliste loend on ridade
   massiiv, failiväljad on üleslaaditud failide `id`-de massiiv ja „other“ valiku vabatekst on
   võtmes `<field_key>_other`.

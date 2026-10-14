@@ -30,6 +30,29 @@ npx wrangler dev
 
 Kui `wrangler.toml` / `wrangler.jsonc` failis on Workeri entrypoint määratud, ei pea seda käsus eraldi ette andma.
 
+### Tenant formi testandmed
+
+Skript loob lokaalsesse D1-sse ja R2-sse saadetud vormi päris API kaudu: admin loob invitationi,
+huviline avab lingi, laeb üles testpildi ja PDF-i, salvestab mustandi ja saadab rootsikeelse vormi.
+Ainult Google'i sisselogimine on simuleeritud otse lokaalses D1-s. Skript keeldub töötamast
+millegi muuga kui `localhost`.
+
+Eeldused: `npm run dev` töötab teises terminalis ning lokaalne D1 on migreeritud ja seed'itud
+(`offer_001`).
+
+```bash
+npm run dev:tenant-submission
+```
+
+Väljund näitab admin UI linki (`http://localhost:5173/tenant-forms/submissions/<id>`). Pooliku vormi
+(avatud, sisse logitud, mustand ja failid olemas, aga saatmata) saab nii:
+
+```bash
+npm run dev:tenant-submission -- --no-submit
+```
+
+Lokaalsed testandmed saab eemaldada `npm run db:seed:local`-iga (tühjendab tenant formi tabelid).
+
 ---
 
 ## 2. D1 — üldinfo

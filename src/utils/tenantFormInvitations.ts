@@ -32,15 +32,18 @@ export function invitationNotFoundResponse(): Response {
 	return jsonResponse({ error: 'Invitation not found' }, 404);
 }
 
-/** Response for an invitation that can no longer be filled in, or null while it is open. */
-export function unavailableInvitationResponse(status: TenantFormInvitationStatus): Response | null {
+/**
+ * Response for an invitation that can no longer be filled in, or null while it is open.
+ * Includes the invitation language so the page can explain this in the guest's language.
+ */
+export function unavailableInvitationResponse(status: TenantFormInvitationStatus, language: string): Response | null {
 	switch (status) {
 		case 'expired':
-			return jsonResponse({ error: 'Invitation has expired', status }, 410);
+			return jsonResponse({ error: 'Invitation has expired', status, language }, 410);
 		case 'revoked':
-			return jsonResponse({ error: 'Invitation has been revoked', status }, 410);
+			return jsonResponse({ error: 'Invitation has been revoked', status, language }, 410);
 		case 'submitted':
-			return jsonResponse({ error: 'Form has already been submitted', status }, 409);
+			return jsonResponse({ error: 'Form has already been submitted', status, language }, 409);
 		default:
 			return null;
 	}

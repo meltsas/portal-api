@@ -42,7 +42,8 @@ export function createTenantFormGoogleAuthHandler(verifyGoogleToken: VerifyGoogl
 		const now = new Date();
 		const nowIso = toIsoSeconds(now);
 		const unavailable = unavailableInvitationResponse(
-			deriveInvitationStatus(invitation.status, invitation.expires_at, nowIso)
+			deriveInvitationStatus(invitation.status, invitation.expires_at, nowIso),
+			invitation.language
 		);
 		if (unavailable) {
 			return unavailable;
@@ -78,7 +79,7 @@ export function createTenantFormGoogleAuthHandler(verifyGoogleToken: VerifyGoogl
 		if (update.meta.changes === 0) {
 			const current = await findInvitationById(env.portal_db, invitation.id);
 			const changedState = current
-				? unavailableInvitationResponse(deriveInvitationStatus(current.status, current.expires_at, nowIso))
+				? unavailableInvitationResponse(deriveInvitationStatus(current.status, current.expires_at, nowIso), current.language)
 				: invitationNotFoundResponse();
 			return changedState ?? rejectAuth(env, invitation.id, 'subject_mismatch', 403, SUBJECT_MISMATCH_MESSAGE);
 		}

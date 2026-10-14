@@ -32,7 +32,7 @@ export async function requireTenantFormAccess(request: Request, env: Env): Promi
 	if (!invitation || invitation.google_subject !== payload.subject) return unauthorized();
 
 	const status = deriveInvitationStatus(invitation.status, invitation.expires_at, toIsoSeconds(new Date()));
-	const unavailable = unavailableInvitationResponse(status);
+	const unavailable = unavailableInvitationResponse(status, invitation.language);
 	if (unavailable) return unavailable;
 
 	return { invitation, subject: payload.subject };

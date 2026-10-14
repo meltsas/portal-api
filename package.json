@@ -11,7 +11,8 @@
     "start": "wrangler dev",
     "test": "vitest",
     "cf-typegen": "wrangler types",
-    "lint:workflows": "node scripts/check-workflows.mjs"
+    "lint:workflows": "node scripts/check-workflows.mjs",
+    "dev:tenant-submission": "node scripts/dev-tenant-submission.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.4",

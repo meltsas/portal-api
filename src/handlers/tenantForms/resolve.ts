@@ -25,7 +25,7 @@ export const handleResolveTenantFormInvitation: RouteHandler = async ({ env, req
 
 	const now = toIsoSeconds(new Date());
 	const status = deriveInvitationStatus(invitation.status, invitation.expires_at, now);
-	const unavailable = unavailableInvitationResponse(status);
+	const unavailable = unavailableInvitationResponse(status, invitation.language);
 	if (unavailable) {
 		return unavailable;
 	}

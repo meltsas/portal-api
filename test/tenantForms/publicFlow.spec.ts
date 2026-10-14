@@ -91,7 +91,7 @@ describe('POST /api/tenant-forms/invitations/resolve', () => {
 		const { token } = await insertTestInvitation(options);
 		const response = await postJson('/invitations/resolve', { token });
 		expect(response.status).toBe(httpStatus);
-		expect(await response.json()).toMatchObject({ status: expectedStatus });
+		expect(await response.json()).toMatchObject({ status: expectedStatus, language: 'sv' });
 	});
 });
 
