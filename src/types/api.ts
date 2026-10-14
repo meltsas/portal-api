@@ -10,6 +10,9 @@ import type {
 	VisibleIf,
 } from '../utils/formSchema';
 import type { TextChangeError } from '../utils/formTextChanges';
+import type { CustomerDocumentType, CustomerSex } from '../utils/customerFields';
+
+export type { CustomerDocumentType, CustomerSex };
 
 // -------------------------------------------------------
 // Common
@@ -245,6 +248,11 @@ export interface AdminCustomerDetail {
 	phone: string;
 	primaryAddress: string;
 	dateOfBirth: string;
+	nationality: string;
+	/** Empty when unknown. */
+	sex: CustomerSex | '';
+	/** Empty when unknown. */
+	documentType: CustomerDocumentType | '';
 	nationalIdNumber: string;
 	documentNumber: string;
 	occupation: string;
@@ -264,6 +272,9 @@ export interface CreateCustomerPayload {
 	phone?: string;
 	primaryAddress?: string;
 	dateOfBirth?: string;
+	nationality?: string;
+	sex?: CustomerSex | '';
+	documentType?: CustomerDocumentType | '';
 	nationalIdNumber?: string;
 	documentNumber?: string;
 	occupation?: string;
@@ -281,6 +292,9 @@ export interface UpdateCustomerPayload {
 	phone?: string;
 	primaryAddress?: string;
 	dateOfBirth?: string;
+	nationality?: string;
+	sex?: CustomerSex | '';
+	documentType?: CustomerDocumentType | '';
 	nationalIdNumber?: string;
 	documentNumber?: string;
 	occupation?: string;
@@ -505,6 +519,10 @@ export interface AdminTenantFormInvitation {
 	googleEmail: string | null;
 	leadId: string | null;
 	submissionId: string | null;
+	/** Review status of the submission, null until the guest has submitted the form. */
+	submissionStatus: TenantFormSubmissionStatus | null;
+	/** True once the submission has been converted to a customer (and maybe a booking). */
+	converted: boolean;
 	createdByEmail: string;
 	openedAt: string | null;
 	authenticatedAt: string | null;
@@ -683,6 +701,9 @@ export interface AdminTenantFormSubmissionListItem {
 	/** Captured at submit, shown like on leads to help spot misuse. */
 	remoteIp: string | null;
 	userAgent: string | null;
+	/** Set by the conversion (`POST …/convert`). */
+	customerId: string | null;
+	bookingId: string | null;
 }
 
 /** One answer with its English label. `displayValue` is a readable English rendering of `value`. */
@@ -724,10 +745,91 @@ export interface AdminTenantFormSubmissionDetail extends AdminTenantFormSubmissi
 	/** Stored values keyed by field key, for later conversion to customer/booking. */
 	values: FormValues;
 	events: AdminTenantFormEvent[];
+	/** Null until the submission is converted. */
+	conversion: AdminTenantFormConversionSummary | null;
+	/** Review decisions possible now; empty once archived. A converted submission can only be archived. */
+	allowedReviewStatuses: TenantFormReviewStatus[];
 }
 
+export interface AdminTenantFormConversionSummary {
+	customerId: string | null;
+	customerName: string | null;
+	bookingId: string | null;
+	bookingStatus: BookingStatus | null;
+	bookingDateFrom: string | null;
+	bookingDateTo: string | null;
+}
+
+/** Without `status`, only the notes change. At least one of the two is required. */
 export interface ReviewTenantFormSubmissionPayload {
-	status: TenantFormReviewStatus;
+	/** Must be one of the submission's `allowedReviewStatuses`. */
+	status?: TenantFormReviewStatus;
 	/** Omit to keep the current notes, null or empty string to clear them. */
 	reviewNotes?: string | null;
+}
+
+// -------------------------------------------------------
+// Admin — tenant form conversion (submission → customer + booking)
+// -------------------------------------------------------
+
+/** Customer fields taken from a submission. Empty strings and an empty guest list (`[]`) are not written over an existing customer. */
+export interface TenantFormConversionCustomer {
+	fullName: string;
+	email: string;
+	phone: string;
+	primaryAddress: string;
+	dateOfBirth: string;
+	nationality: string;
+	sex: CustomerSex | '';
+	documentType: CustomerDocumentType | '';
+	documentNumber: string;
+	occupation: string;
+	employerOrPensionInfo: string;
+	/** JSON array of the guest rows with the form's keys, options as option keys. */
+	familyMembersJson: string;
+}
+
+export interface TenantFormConversionBooking {
+	offerId: string;
+	offerTitle: string | null;
+	dateFrom: string;
+	dateTo: string;
+	nights: number;
+	adults: number;
+	children: number;
+	reasonOfStay: string;
+	title: string;
+	notes: string;
+}
+
+export interface AdminTenantFormOverlappingBooking {
+	id: string;
+	status: BookingStatus;
+	dateFrom: string;
+	dateTo: string;
+	title: string;
+	customerName: string | null;
+}
+
+export interface AdminTenantFormConversionPreview {
+	customer: TenantFormConversionCustomer;
+	/** Null when the submission has no planned stay. */
+	booking: TenantFormConversionBooking | null;
+	/** Customers whose email is the submission's contact or Google email. */
+	customerMatches: AdminCustomerListItem[];
+	/** Tentative or confirmed bookings of the same offer in the planned stay. */
+	overlappingBookings: AdminTenantFormOverlappingBooking[];
+}
+
+export type TenantFormConversionBookingStatus = 'draft' | 'tentative' | 'confirmed';
+
+export interface ConvertTenantFormSubmissionPayload {
+	customer: { mode: 'create' } | { mode: 'update'; customerId: string };
+	/** Null converts to a customer only. */
+	booking: { status: TenantFormConversionBookingStatus } | null;
+}
+
+export interface ConvertTenantFormSubmissionResponse {
+	customerId: string;
+	bookingId: string | null;
 }

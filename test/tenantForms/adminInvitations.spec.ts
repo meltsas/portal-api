@@ -175,6 +175,67 @@ describe('GET /api/admin/tenant-forms/invitations', () => {
 	});
 });
 
+describe('GET /api/admin/tenant-forms/invitations review status', () => {
+	async function insertSubmission(invitationId: string, status: string, customerId: string | null = null): Promise<void> {
+		await env.portal_db
+			.prepare(
+				`INSERT INTO form_submissions
+				 (id, invitation_id, template_id, language, google_subject, google_email, contact_email, phone, full_name,
+				  values_json, status, customer_id, submitted_at)
+				 VALUES (?, ?, 'tenant_details_v1', 'en', 'sub', 'g@example.com', 'c@example.com', '+46 70', 'Guest', '{}', ?, ?,
+				         '2026-10-14T10:00:00Z')`
+			)
+			.bind(`sub_${invitationId}`, invitationId, status, customerId)
+			.run();
+	}
+
+	beforeEach(async () => {
+		await env.portal_db.prepare(`INSERT INTO customers (id, full_name, email) VALUES ('cust_1', 'Guest', 'c@example.com')`).run();
+		await insertInvitation('inv_opened', 'opened', isoFromNow(DAY_MS));
+		for (const [id, status, customerId] of [
+			['inv_waiting', 'submitted', null],
+			['inv_approved', 'approved', null],
+			['inv_converted', 'approved', 'cust_1'],
+			['inv_rejected', 'rejected', null],
+		] as const) {
+			await insertInvitation(id, 'submitted', isoFromNow(-DAY_MS));
+			await insertSubmission(id, status, customerId);
+		}
+	});
+
+	async function list(query = ''): Promise<AdminTenantFormInvitation[]> {
+		const response = await adminFetch(`/invitations${query}`);
+		expect(response.status).toBe(200);
+		return ((await response.json()) as { data: AdminTenantFormInvitation[] }).data;
+	}
+
+	function reviewOf(invitations: AdminTenantFormInvitation[]): Record<string, [string | null, boolean]> {
+		return Object.fromEntries(invitations.map((invitation) => [invitation.id, [invitation.submissionStatus, invitation.converted]]));
+	}
+
+	it('returns the review status and whether the submission was converted', async () => {
+		expect(reviewOf(await list())).toEqual({
+			inv_opened: [null, false],
+			inv_waiting: ['submitted', false],
+			inv_approved: ['approved', false],
+			inv_converted: ['approved', true],
+			inv_rejected: ['rejected', false],
+		});
+	});
+
+	it('filters by review status and conversion', async () => {
+		expect(Object.keys(reviewOf(await list('?submissionStatus=approved'))).sort()).toEqual(['inv_approved', 'inv_converted']);
+		expect(Object.keys(reviewOf(await list('?submissionStatus=approved&converted=false')))).toEqual(['inv_approved']);
+		expect(Object.keys(reviewOf(await list('?converted=true')))).toEqual(['inv_converted']);
+		expect(Object.keys(reviewOf(await list('?submissionStatus=submitted')))).toEqual(['inv_waiting']);
+	});
+
+	it('rejects unknown review status and conversion filters', async () => {
+		expect((await adminFetch('/invitations?submissionStatus=pending')).status).toBe(400);
+		expect((await adminFetch('/invitations?converted=yes')).status).toBe(400);
+	});
+});
+
 describe('GET /api/admin/tenant-forms/invitations/:id', () => {
 	it('returns the invitation with its event timeline', async () => {
 		const { invitation } = await createValidInvitation();

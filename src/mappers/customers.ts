@@ -1,4 +1,10 @@
-import type { AdminCustomerListItem, AdminCustomerDetail, CustomerStatus } from '../types/api';
+import type {
+	AdminCustomerListItem,
+	AdminCustomerDetail,
+	CustomerDocumentType,
+	CustomerSex,
+	CustomerStatus,
+} from '../types/api';
 import type { CustomerRow } from '../types/db';
 import { toISOTimestamp } from '../utils/date';
 
@@ -24,6 +30,9 @@ export function toAdminCustomerDetail(row: CustomerRow): AdminCustomerDetail {
 		phone: row.phone,
 		primaryAddress: row.primary_address,
 		dateOfBirth: row.date_of_birth,
+		nationality: row.nationality,
+		sex: row.sex as CustomerSex | '',
+		documentType: row.document_type as CustomerDocumentType | '',
 		nationalIdNumber: row.national_id_number,
 		documentNumber: row.document_number,
 		occupation: row.occupation,

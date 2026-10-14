@@ -86,3 +86,43 @@ export function tenantAccessToken(
 export function randomInvitationToken(): string {
 	return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
 }
+
+/** A complete, valid tenant_details_v1 submission filled in Swedish. */
+export function swedishSubmission(fileIds: string[]): Record<string, unknown> {
+	return {
+		planned_arrival: '2026-12-01',
+		planned_departure: '2027-01-15',
+		first_name: 'Åsa',
+		last_name: 'Exempel',
+		sex: 'female',
+		date_of_birth: '1980-05-20',
+		citizenship: 'Svensk',
+		document_type: 'passport',
+		document_number: 'X1234567',
+		phone: '+46 70 123 45 67',
+		contact_email: 'asa@example.com',
+		address_line1: 'Testgatan 1',
+		city: 'Uppsala',
+		postcode: '753 10',
+		country: 'Sverige',
+		other_guests: [
+			{
+				first_name: 'Barn',
+				last_name: 'Exempel',
+				sex: 'male',
+				date_of_birth: '2015-03-01',
+				citizenship: 'Svensk',
+				document_type: 'id_card',
+				document_number: 'Y7654321',
+				relationship: 'child',
+			},
+		],
+		stay_purpose: 'other',
+		stay_purpose_other: 'Språkkurs',
+		employment_type: 'pensioner',
+		id_documents: fileIds,
+		video_call_willing: 'yes',
+		video_call_time: 'Kvällar',
+		privacy_consent: true,
+	};
+}

@@ -24,6 +24,12 @@ export function daysBetween(from: string, to: string): number {
 	return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY);
 }
 
+/** Age in whole years on `date` (both `YYYY-MM-DD`). Someone born on 29 February turns a year older on 1 March. */
+export function ageOn(dateOfBirth: string, date: string): number {
+	const years = Number(date.slice(0, 4)) - Number(dateOfBirth.slice(0, 4));
+	return date.slice(5) < dateOfBirth.slice(5) ? years - 1 : years;
+}
+
 /** `YYYY-MM-DD` plus `days` calendar days. */
 export function addDays(date: string, days: number): string {
 	return new Date(Date.parse(`${date}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);

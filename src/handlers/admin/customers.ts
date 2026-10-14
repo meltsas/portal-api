@@ -2,6 +2,7 @@ import type { RouteHandler } from '../../router/types';
 import type { CustomerStatus, CreateCustomerPayload, UpdateCustomerPayload } from '../../types/api';
 import type { CustomerRow } from '../../types/db';
 import { toAdminCustomerListItem, toAdminCustomerDetail } from '../../mappers/customers';
+import { CUSTOMER_DOCUMENT_TYPES, CUSTOMER_SEXES } from '../../utils/customerFields';
 import { jsonResponse, notFound, badRequest, parseJsonBody } from '../../utils/response';
 
 const VALID_STATUSES: CustomerStatus[] = ['active', 'inactive', 'archived'];
@@ -9,16 +10,18 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_NAME_LENGTH = 200;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_PHONE_LENGTH = 30;
-const MAX_ADDRESS_LENGTH = 500;
+// Address and occupation built from a tenant form can be longer than a typed-in value.
+const MAX_ADDRESS_LENGTH = 800;
 const MAX_SHORT_LENGTH = 100;
 const MAX_DOC_LENGTH = 100;
-const MAX_OCCUPATION_LENGTH = 200;
+const MAX_OCCUPATION_LENGTH = 600;
 const MAX_LONG_LENGTH = 2000;
 const MAX_NOTES_LENGTH = 5000;
 const MAX_FAMILY_JSON_LENGTH = 10000;
 
-const CUSTOMER_COLUMNS =
+export const CUSTOMER_COLUMNS =
 	`id, source_lead_id, full_name, email, phone, primary_address, date_of_birth,
+	 nationality, sex, document_type,
 	 national_id_number, document_number, occupation, employer_or_pension_info,
 	 income_notes, family_members_json, notes, status, created_at, updated_at`;
 
@@ -121,6 +124,15 @@ export const handleAdminCreateCustomer: RouteHandler = async ({ env, request }) 
 	const dateOfBirth = readOptionalString(body.dateOfBirth, MAX_SHORT_LENGTH, 'dateOfBirth');
 	if (dateOfBirth instanceof Response) return dateOfBirth;
 
+	const nationality = readOptionalString(body.nationality, MAX_SHORT_LENGTH, 'nationality');
+	if (nationality instanceof Response) return nationality;
+
+	const sex = readOptionalChoice(body.sex, CUSTOMER_SEXES, 'sex');
+	if (sex instanceof Response) return sex;
+
+	const documentType = readOptionalChoice(body.documentType, CUSTOMER_DOCUMENT_TYPES, 'documentType');
+	if (documentType instanceof Response) return documentType;
+
 	const nationalIdNumber = readOptionalString(body.nationalIdNumber, MAX_DOC_LENGTH, 'nationalIdNumber');
 	if (nationalIdNumber instanceof Response) return nationalIdNumber;
 
@@ -163,12 +175,14 @@ export const handleAdminCreateCustomer: RouteHandler = async ({ env, request }) 
 		.prepare(
 			`INSERT INTO customers
 			 (id, source_lead_id, full_name, email, phone, primary_address, date_of_birth,
+			  nationality, sex, document_type,
 			  national_id_number, document_number, occupation, employer_or_pension_info,
 			  income_notes, family_members_json, notes, status)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		)
 		.bind(
 			id, sourceLeadId, fullName, email, phone, primaryAddress, dateOfBirth,
+			nationality, sex, documentType,
 			nationalIdNumber, documentNumber, occupation, employerOrPensionInfo,
 			incomeNotes, familyMembersJson, notes, status,
 		)
@@ -225,6 +239,7 @@ export const handleAdminUpdateCustomer: RouteHandler = async ({ env, request, pa
 		['phone', 'phone', MAX_PHONE_LENGTH, 'phone'],
 		['primary_address', 'primaryAddress', MAX_ADDRESS_LENGTH, 'primaryAddress'],
 		['date_of_birth', 'dateOfBirth', MAX_SHORT_LENGTH, 'dateOfBirth'],
+		['nationality', 'nationality', MAX_SHORT_LENGTH, 'nationality'],
 		['national_id_number', 'nationalIdNumber', MAX_DOC_LENGTH, 'nationalIdNumber'],
 		['document_number', 'documentNumber', MAX_DOC_LENGTH, 'documentNumber'],
 		['occupation', 'occupation', MAX_OCCUPATION_LENGTH, 'occupation'],
@@ -245,6 +260,20 @@ export const handleAdminUpdateCustomer: RouteHandler = async ({ env, request, pa
 		}
 		fields.push(`${column} = ?`);
 		values.push(trimmed);
+	}
+
+	if (body.sex !== undefined) {
+		const sex = readOptionalChoice(body.sex, CUSTOMER_SEXES, 'sex');
+		if (sex instanceof Response) return sex;
+		fields.push('sex = ?');
+		values.push(sex);
+	}
+
+	if (body.documentType !== undefined) {
+		const documentType = readOptionalChoice(body.documentType, CUSTOMER_DOCUMENT_TYPES, 'documentType');
+		if (documentType instanceof Response) return documentType;
+		fields.push('document_type = ?');
+		values.push(documentType);
 	}
 
 	if (body.familyMembersJson !== undefined) {
@@ -301,4 +330,13 @@ function readOptionalString(value: unknown, max: number, label: string): string 
 		return badRequest(`${label} must be at most ${max} characters`);
 	}
 	return trimmed;
+}
+
+/** An allowed option key, or '' for a missing or empty value. */
+function readOptionalChoice(value: unknown, allowed: readonly string[], label: string): string | Response {
+	if (value === undefined || value === null || value === '') return '';
+	if (typeof value !== 'string' || !allowed.includes(value)) {
+		return badRequest(`${label} must be empty or one of: ${allowed.join(', ')}`);
+	}
+	return value;
 }

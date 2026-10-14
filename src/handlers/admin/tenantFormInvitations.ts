@@ -4,6 +4,7 @@ import type {
 	CreateTenantFormInvitationResponse,
 	TenantFormInvitationLinkResponse,
 	TenantFormInvitationStatus,
+	TenantFormSubmissionStatus,
 } from '../../types/api';
 import type {
 	FormEventRow,
@@ -28,12 +29,15 @@ const MIN_VALID_DAYS = 1;
 const MAX_VALID_DAYS = 14;
 const MS_PER_DAY = 86_400_000;
 const STATUS_FILTERS: TenantFormInvitationStatus[] = ['pending', 'opened', 'submitted', 'expired', 'revoked'];
+const SUBMISSION_STATUS_FILTERS: TenantFormSubmissionStatus[] = ['submitted', 'approved', 'rejected', 'archived'];
+const CONVERTED_FILTERS = ['true', 'false'];
 
 const INVITATION_SELECT = `
 	SELECT i.id, i.template_id, i.display_name, i.offer_id, i.language, i.status, i.expires_at,
 	       i.google_email, i.lead_id, i.created_by_email, i.opened_at, i.authenticated_at,
 	       i.submitted_at, i.revoked_at, i.created_at, i.updated_at,
-	       o.title AS offer_title, s.id AS submission_id
+	       o.title AS offer_title, s.id AS submission_id, s.status AS submission_status,
+	       s.customer_id AS submission_customer_id
 	FROM form_invitations i
 	LEFT JOIN offers o ON o.id = i.offer_id
 	LEFT JOIN form_submissions s ON s.invitation_id = i.id`;
@@ -132,10 +136,18 @@ export const handleAdminCreateTenantFormInvitation: RouteHandler = async ({ env,
 
 export const handleAdminGetTenantFormInvitations: RouteHandler = async ({ env, url }) => {
 	const statusFilter = url.searchParams.get('status');
+	const submissionStatusFilter = url.searchParams.get('submissionStatus');
+	const convertedFilter = url.searchParams.get('converted');
 	const offerIdFilter = url.searchParams.get('offerId');
 
 	if (statusFilter && !STATUS_FILTERS.includes(statusFilter as TenantFormInvitationStatus)) {
 		return badRequest(`Invalid status filter. Must be one of: ${STATUS_FILTERS.join(', ')}`);
+	}
+	if (submissionStatusFilter && !SUBMISSION_STATUS_FILTERS.includes(submissionStatusFilter as TenantFormSubmissionStatus)) {
+		return badRequest(`Invalid submissionStatus filter. Must be one of: ${SUBMISSION_STATUS_FILTERS.join(', ')}`);
+	}
+	if (convertedFilter && !CONVERTED_FILTERS.includes(convertedFilter)) {
+		return badRequest(`Invalid converted filter. Must be one of: ${CONVERTED_FILTERS.join(', ')}`);
 	}
 
 	const now = toIsoSeconds(new Date());
@@ -151,6 +163,13 @@ export const handleAdminGetTenantFormInvitations: RouteHandler = async ({ env, u
 	} else if (statusFilter) {
 		conditions.push('i.status = ?');
 		bindings.push(statusFilter);
+	}
+	if (submissionStatusFilter) {
+		conditions.push('s.status = ?');
+		bindings.push(submissionStatusFilter);
+	}
+	if (convertedFilter) {
+		conditions.push(convertedFilter === 'true' ? 's.customer_id IS NOT NULL' : 's.customer_id IS NULL');
 	}
 	if (offerIdFilter) {
 		conditions.push('i.offer_id = ?');

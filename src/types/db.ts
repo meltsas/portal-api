@@ -54,6 +54,9 @@ export interface CustomerRow {
 	phone: string;
 	primary_address: string;
 	date_of_birth: string;
+	nationality: string;
+	sex: string;
+	document_type: string;
 	national_id_number: string;
 	document_number: string;
 	occupation: string;
@@ -208,6 +211,8 @@ export interface FormInvitationRow {
 export interface FormInvitationWithJoinsRow extends Omit<FormInvitationRow, 'token_hash' | 'google_subject'> {
 	offer_title: string | null;
 	submission_id: string | null;
+	submission_status: string | null;
+	submission_customer_id: string | null;
 }
 
 export interface TenantFormInvitationAccessRow
@@ -247,6 +252,8 @@ export interface FormSubmissionRow {
 	remote_ip: string | null;
 	user_agent: string | null;
 	submitted_at: string;
+	customer_id: string | null;
+	booking_id: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -258,6 +265,10 @@ export interface FormSubmissionWithJoinsRow
 	offer_id: string;
 	offer_title: string | null;
 	file_count: number;
+	customer_full_name: string | null;
+	booking_status: string | null;
+	booking_date_from: string | null;
+	booking_date_to: string | null;
 }
 
 export interface FormSubmissionFileRow {

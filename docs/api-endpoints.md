@@ -711,7 +711,8 @@ Customer võib olla seotud lead'iga `sourceLeadId` kaudu (FK `leads.id`, `ON DEL
 Tabelis on tähtsamad väljad:
 
 - `fullName`, `email` — required.
-- `phone`, `primaryAddress`, `dateOfBirth`, `nationalIdNumber`, `documentNumber`, `occupation`, `employerOrPensionInfo`, `incomeNotes`, `notes` — kõik tekstiväljad, default `''` (NULL'i ei kasuta).
+- `phone`, `primaryAddress`, `dateOfBirth`, `nationality`, `nationalIdNumber`, `documentNumber`, `occupation`, `employerOrPensionInfo`, `incomeNotes`, `notes` — kõik tekstiväljad, default `''` (NULL'i ei kasuta).
+- `sex` (`female` / `male` / `other`) ja `documentType` (`passport` / `id_card` / `residence_permit`) — tenant formi valikuvõtmed, `''` kui teadmata. Need ja `nationality` lisandusid migratsiooniga `0012` (faas 9), et tenant formi konversioon saaks registreerimiseks vajalikud andmed customerisse kanda.
 - `familyMembersJson` — JSON-encoded array string. Default `'[]'`. POST/PUT puhul valideeritakse, et väärtus on parsitav JSON ja et root on array.
 - `status` — `active` / `inactive` / `archived`. Default `active`.
 
@@ -774,6 +775,9 @@ Tagastab ühe customer'i kogu detailvaate (kõik DB-väljad sh. tundlikud).
   "phone": "+372 5555 5555",
   "primaryAddress": "Some Street 12, Tallinn",
   "dateOfBirth": "1990-04-15",
+  "nationality": "Estonian",
+  "sex": "female",
+  "documentType": "id_card",
   "nationalIdNumber": "39004150123",
   "documentNumber": "AA1234567",
   "occupation": "Software engineer",
@@ -805,6 +809,9 @@ Loob uue customer'i.
   "phone": "+372 5555 5555",
   "primaryAddress": "Some Street 12, Tallinn",
   "dateOfBirth": "1990-04-15",
+  "nationality": "Estonian",
+  "sex": "female",
+  "documentType": "id_card",
   "nationalIdNumber": "39004150123",
   "documentNumber": "AA1234567",
   "occupation": "Software engineer",
@@ -821,9 +828,10 @@ Validation:
 - `fullName` — required, mitte-tühi, kuni 200 chars.
 - `email` — required, kuni 254 chars, peab matchima `^[^\s@]+@[^\s@]+\.[^\s@]+$`. Salvestatakse lowercase'is.
 - `phone` — optional, kuni 30 chars.
-- `primaryAddress` — optional, kuni 500 chars.
-- `dateOfBirth`, `nationalIdNumber`, `documentNumber` — optional, kuni 100 chars (`dateOfBirth` formaadi sundi siin pole — võib olla nt `1990-04-15` või vabas vormis).
-- `occupation` — optional, kuni 200 chars.
+- `primaryAddress` — optional, kuni 800 chars (tenant formist kokku pandud aadress võib olla pikk).
+- `dateOfBirth`, `nationality`, `nationalIdNumber`, `documentNumber` — optional, kuni 100 chars (`dateOfBirth` formaadi sundi siin pole — võib olla nt `1990-04-15` või vabas vormis).
+- `sex`, `documentType` — optional, tühi või üks ülaltoodud valikuvõtmetest; muu väärtus → 400.
+- `occupation` — optional, kuni 600 chars.
 - `employerOrPensionInfo`, `incomeNotes` — optional, kuni 2000 chars.
 - `notes` — optional, kuni 5000 chars.
 - `familyMembersJson` — optional. Kui antakse, peab olema valid JSON, mis parseb arrayks. Tühi string normaliseeritakse `'[]'`'ks. Max 10 000 chars.
@@ -1668,12 +1676,23 @@ hiljem uuesti `GET …/invitations/:id/link` kaudu. Baasaadress tuleb muutujast 
 
 ### `GET /api/admin/tenant-forms/invitations`
 
-Filtrid `?status=pending|opened|submitted|expired|revoked` ja `?offerId=`. `expired` arvutatakse
-`expires_at` põhjal ega ole kunagi salvestatud.
+Filtrid (kõik valikulised, kombineeritavad):
+
+- `?status=pending|opened|submitted|expired|revoked` — lingi staatus. `expired` arvutatakse
+  `expires_at` põhjal ega ole kunagi salvestatud.
+- `?submissionStatus=submitted|approved|rejected|archived` — saadetud vormi ülevaatuse staatus.
+- `?converted=true|false` — kas submission on konverteeritud customeriks.
+- `?offerId=`.
 
 Iga rida (`AdminTenantFormInvitation`): `id`, `templateId`, `displayName`, `offerId`, `offerTitle`,
-`language`, `status`, `expiresAt`, `googleEmail`, `leadId`, `submissionId`, `createdByEmail`,
-`openedAt`, `authenticatedAt`, `submittedAt`, `revokedAt`, `createdAt`, `updatedAt`.
+`language`, `status`, `expiresAt`, `googleEmail`, `leadId`, `submissionId`, `submissionStatus`,
+`converted`, `createdByEmail`, `openedAt`, `authenticatedAt`, `submittedAt`, `revokedAt`,
+`createdAt`, `updatedAt`.
+
+- `status` on lingi staatus: pärast saatmist jääb see `submitted`-iks.
+- `submissionStatus` on `null`, kuni vorm on saatmata, seejärel ülevaatuse staatus.
+- `converted` on `true` pärast konversiooni.
+- Admin UI näitab saadetud vormi puhul staatusena `submissionStatus`-t.
 
 ### `GET /api/admin/tenant-forms/invitations/:id`
 
@@ -1712,7 +1731,8 @@ Filtrid `?status=submitted|approved|rejected|archived` ja `?offerId=`.
 Iga rida: `id`, `invitationId`, `displayName`, `offerId`, `offerTitle`, `fullName`, `contactEmail`,
 `phone`, `plannedArrival`, `plannedDeparture`, `language` (mis keeles täideti), `status`,
 `fileCount`, `submittedAt`, `reviewedAt`, `remoteIp` ja `userAgent` (salvestatud submit'i hetkel,
-`CF-Connecting-IP` ja `User-Agent`, nagu leads'i puhul). Google `sub`-i ei tagastata.
+`CF-Connecting-IP` ja `User-Agent`, nagu leads'i puhul), `customerId` ja `bookingId` (konversiooni
+järel, muidu `null`). Google `sub`-i ei tagastata.
 
 ### `GET /api/admin/tenant-forms/submissions/:id`
 
@@ -1721,7 +1741,14 @@ sündmuse `submission_viewed`.
 
 Lisaks listi väljadele: `templateId`, `googleEmail` (kontrollitud Google konto), `reviewedByEmail`,
 `reviewNotes`, `documentsDeleteAfter`, `documentsDeletedAt`, `files` (metadata), `values`
-(salvestatud väärtused), `events` ja `sections`:
+(salvestatud väärtused), `events`, `conversion` ja `sections`.
+
+`conversion` on `null` kuni konversioonini, seejärel
+`{ customerId, customerName, bookingId, bookingStatus, bookingDateFrom, bookingDateTo }`.
+
+`allowedReviewStatuses` on praegu võimalikud otsused (vt `PUT …/review`); arhiveeritud vormil tühi.
+
+`sections` näide:
 
 ```json
 {
@@ -1755,11 +1782,32 @@ Kaaskülaliste loendi vastusel on `items` (iga rida oma vastustega). Vastamata v
 { "status": "approved", "reviewNotes": "Video call done" }
 ```
 
-- `status` — `approved`, `rejected` või `archived`.
+- `status` — `approved`, `rejected` või `archived`; peab olema submissioni `allowedReviewStatuses` hulgas.
 - `reviewNotes` — valikuline, kuni 2000 märki. Puudub → märkmed jäävad samaks; `null` või `""` → kustutatakse.
+- Ilma `status`-ita muutuvad ainult märkmed: staatus, `reviewedByEmail` ja `reviewedAt` jäävad samaks,
+  sündmus on `review_notes_updated`. Märkmeid saab muuta igas staatuses, ka arhiveeritud vormil.
+  Vähemalt üks väljadest on kohustuslik.
 
-Kirjutab sündmuse, mille tüüp on sama mis `status` (märkmeid sündmusse ei kirjutata).
-**Response 200:** uuendatud rida koos `reviewedByEmail` ja `reviewNotes`-iga. **400** / **404**.
+Lubatud otsused (sama staatus uuesti ei ole lubatud):
+
+| Praegune | Lubatud `status` |
+|---|---|
+| `submitted` | `approved`, `rejected`, `archived` |
+| `approved`, konverteerimata | `rejected`, `archived` |
+| `approved`, konverteeritud | `archived` |
+| `rejected` | `approved`, `archived` |
+| `archived` | — (lõplik) |
+
+Konverteeritud vormi tagasilükkamine on keelatud, sest see jätaks customeri ja bookingu alles.
+Kui peatumist ei toimu, tühistatakse booking Bookings vaates.
+
+Otsus kirjutab sündmuse, mille tüüp on sama mis `status` (märkmeid sündmusse ei kirjutata). Otsus
+ja sündmus kirjutatakse ainult siis, kui submission on samas seisus, mille vastu otsust kontrolliti.
+Seega ei saa samaaegne konversioon ja tagasilükkamine jätta vormi seisu „rejected, aga konverteeritud“.
+
+**Response 200:** uuendatud rida koos `reviewedByEmail` ja `reviewNotes`-iga.
+**Response 409:** otsus pole praeguses seisus lubatud (`{ error, allowedStatuses }`) või submission
+muutus vahepeal. **400** / **404**.
 
 ### `GET /api/admin/tenant-forms/files/:fileId`
 
@@ -1773,6 +1821,106 @@ UTF-8), `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`,
 Iga vaatamine kirjutab sündmuse `file_viewed` (`metadata: { "download": true|false }`).
 **404:** fail puudub, pole veel saadetud või on kustutatud. Admin UI laeb faili `fetch(..., { credentials: 'include' })`
 kaudu blob'iks.
+
+---
+
+### Konversioon: submission → customer + booking
+
+Heakskiidetud (`approved`) submissionist luuakse uus customer või uuendatakse olemasolevat ning
+soovi korral luuakse booking. Üks submission konverteeritakse ainult üks kord. Kaardistus on
+roadmapis (`non-touristic-rentals/docs/seasona-rental-details-form/roadmap.md`, faas 9).
+
+### `GET /api/admin/tenant-forms/submissions/:id/conversion`
+
+Eelvaade: mida konversioon kirjutaks. Andmeid ei muuda ega kirjuta sündmust (submissioni avamine on
+juba logitud `submission_viewed`-iga).
+
+**Response 200:**
+
+```json
+{
+  "customer": {
+    "fullName": "Åsa Exempel",
+    "email": "asa@example.com",
+    "phone": "+46 70 123 45 67",
+    "primaryAddress": "Testgatan 1, 753 10 Uppsala, Sverige",
+    "dateOfBirth": "1980-05-20",
+    "nationality": "Svensk",
+    "sex": "female",
+    "documentType": "passport",
+    "documentNumber": "X1234567",
+    "occupation": "Pensioner",
+    "employerOrPensionInfo": "",
+    "familyMembersJson": "[{\"first_name\":\"Barn\",\"relationship\":\"child\", …}]"
+  },
+  "booking": {
+    "offerId": "offer_001",
+    "offerTitle": "Casa Bonita",
+    "dateFrom": "2026-12-01",
+    "dateTo": "2027-01-15",
+    "nights": 45,
+    "adults": 1,
+    "children": 1,
+    "reasonOfStay": "Other non-tourist reason (please specify): Language course",
+    "title": "Åsa Exempel",
+    "notes": ""
+  },
+  "customerMatches": [],
+  "overlappingBookings": []
+}
+```
+
+- `customer.familyMembersJson` — kaaskülaliste read vormi võtmetega, valikud võtmetena.
+- `booking` — `null`, kui submissionil pole kehtivat peatumist. `adults`/`children`: põhikülaline ja
+  kaaskülalised vanuse järgi saabumise päeval (alla 18 → laps, sünnikuupäevata → täiskasvanu).
+- `customerMatches` — customerid (listi kujul), kelle email on submissioni `contactEmail` või Google
+  email (tõstutundetu).
+- `overlappingBookings` — sama offeri `tentative`/`confirmed` bookingud, mis kattuvad peatumisega:
+  `{ id, status, dateFrom, dateTo, title, customerName }`.
+
+**404:** tundmatu id.
+
+### `POST /api/admin/tenant-forms/submissions/:id/convert`
+
+**Request body:**
+
+```json
+{
+  "customer": { "mode": "create" },
+  "booking": { "status": "draft" }
+}
+```
+
+- `customer` — `{ "mode": "create" }` või `{ "mode": "update", "customerId": "…" }`.
+  - `create`: uus customer, `status: active`, `sourceLeadId` = invitationi lead.
+  - `update`: üle kirjutatakse ainult eelvaate väljad, mille väärtus pole tühi (`""` ega `"[]"`).
+    `notes`, `incomeNotes`, `nationalIdNumber` ja `status` jäävad samaks; `sourceLeadId`
+    täidetakse ainult siis, kui see on tühi.
+- `booking` — kohustuslik võti: `null` (ainult customer) või `{ "status": "draft" | "tentative" | "confirmed" }`.
+  Booking on `customer_stay`, hind tühi, `EUR`, `sourceLeadId` = invitationi lead.
+  `tentative`/`confirmed` puhul tehakse sama kattuvuse kontroll mis `POST /api/admin/bookings`-is.
+
+Kõik kirjutatakse ühes D1 batch'is: customer, booking, sündmused `converted_to_customer`
+(`{ mode, customerId }`) ja `converted_to_booking` (`{ bookingId, status }`) ning lõpuks seos
+`form_submissions.customer_id` / `booking_id`. Iga lause on tingimuslik (submission pole veel
+konverteeritud), nii et kahest samaaegsest konversioonist läheb läbi ainult üks.
+
+**Response 201:**
+
+```json
+{ "customerId": "…", "bookingId": "…" }
+```
+
+`bookingId` on `null`, kui `booking` oli `null`.
+
+**Response 400:** vigane body või tundmatu `customerId` (`Customer not found`).
+**Response 404:** tundmatu submission.
+**Response 409:**
+
+- `Only approved submissions can be converted`;
+- `Submission has already been converted`;
+- `Submission has no planned stay` (booking soovitud, aga kuupäevad puuduvad);
+- `Booking overlaps an existing tentative or confirmed booking for this offer`.
 
 ---
 
@@ -1821,7 +1969,7 @@ kaudu blob'iks.
 | `GET`    | `/api/admin/tenant-forms/templates`               | admin  | Template'id + tõlke valmidus                   |
 | `GET`    | `/api/admin/tenant-forms/templates/:id`           | admin  | Template'i struktuur ja kõik tekstid           |
 | `PUT`    | `/api/admin/tenant-forms/templates/:id/translations` | admin | Muuda tekste ja tõlkeid (kõik või mitte midagi) |
-| `GET`    | `/api/admin/tenant-forms/invitations`             | admin  | Invitationite list (filter: `?status=`, `?offerId=`) |
+| `GET`    | `/api/admin/tenant-forms/invitations`             | admin  | Invitationite list (filter: `?status=`, `?submissionStatus=`, `?converted=`, `?offerId=`) |
 | `POST`   | `/api/admin/tenant-forms/invitations`             | admin  | Loo invitation (vastuses link)                 |
 | `GET`    | `/api/admin/tenant-forms/invitations/:id`         | admin  | Invitation + sündmuste ajajoon                 |
 | `GET`    | `/api/admin/tenant-forms/invitations/:id/link`    | admin  | Näita avatud invitationi linki uuesti (logitakse) |
@@ -1829,6 +1977,8 @@ kaudu blob'iks.
 | `GET`    | `/api/admin/tenant-forms/submissions`             | admin  | Saadetud vormide list (filter: `?status=`, `?offerId=`) |
 | `GET`    | `/api/admin/tenant-forms/submissions/:id`         | admin  | Vastused EN siltidega (logitakse)              |
 | `PUT`    | `/api/admin/tenant-forms/submissions/:id/review`  | admin  | Approve / reject / archive + märkmed           |
+| `GET`    | `/api/admin/tenant-forms/submissions/:id/conversion` | admin | Konversiooni eelvaade (customer, booking, vasted, kattuvused) |
+| `POST`   | `/api/admin/tenant-forms/submissions/:id/convert` | admin  | Loo/uuenda customer ja loo booking             |
 | `GET`    | `/api/admin/tenant-forms/files/:fileId`           | admin  | Saadetud faili striimimine (logitakse)         |
 
 ---

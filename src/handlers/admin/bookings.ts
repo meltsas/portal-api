@@ -7,11 +7,11 @@ import type {
 } from '../../types/api';
 import type { BookingRow, BookingWithJoinsRow } from '../../types/db';
 import { toAdminBookingListItem, toAdminBookingDetail } from '../../mappers/bookings';
+import { BLOCKING_STATUSES, BOOKING_OVERLAP_ERROR, findOverlap } from '../../utils/bookingOverlap';
 import { jsonResponse, notFound, badRequest, parseJsonBody } from '../../utils/response';
 
 const VALID_BOOKING_TYPES: BookingType[] = ['customer_stay', 'owner_use', 'maintenance', 'blocked', 'other'];
 const VALID_STATUSES: BookingStatus[] = ['draft', 'tentative', 'confirmed', 'cancelled', 'completed'];
-const BLOCKING_STATUSES: BookingStatus[] = ['tentative', 'confirmed'];
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TITLE_LENGTH = 200;
@@ -210,12 +210,9 @@ export const handleAdminCreateBooking: RouteHandler = async ({ env, request }) =
 	// draft / cancelled / completed are non-blocking by design.
 
 	if (BLOCKING_STATUSES.includes(status)) {
-		const overlap = await findOverlap(env, offerId, dateFrom, dateTo, null);
+		const overlap = await findOverlap(env.portal_db, offerId, dateFrom, dateTo, null);
 		if (overlap) {
-			return jsonResponse(
-				{ error: 'Booking overlaps an existing tentative or confirmed booking for this offer' },
-				409,
-			);
+			return jsonResponse({ error: BOOKING_OVERLAP_ERROR }, 409);
 		}
 	}
 
@@ -378,12 +375,9 @@ export const handleAdminUpdateBooking: RouteHandler = async ({ env, request, par
 	// status changed. Cheap enough to always run when blocking.
 
 	if (BLOCKING_STATUSES.includes(nextStatus)) {
-		const overlap = await findOverlap(env, existing.offer_id, nextDateFrom, nextDateTo, id);
+		const overlap = await findOverlap(env.portal_db, existing.offer_id, nextDateFrom, nextDateTo, id);
 		if (overlap) {
-			return jsonResponse(
-				{ error: 'Booking overlaps an existing tentative or confirmed booking for this offer' },
-				409,
-			);
+			return jsonResponse({ error: BOOKING_OVERLAP_ERROR }, 409);
 		}
 	}
 
@@ -399,33 +393,6 @@ export const handleAdminUpdateBooking: RouteHandler = async ({ env, request, par
 };
 
 // --- Helpers ---
-
-async function findOverlap(
-	env: Env,
-	offerId: string,
-	dateFrom: string,
-	dateTo: string,
-	excludeId: string | null,
-): Promise<{ id: string } | null> {
-	const placeholders = BLOCKING_STATUSES.map(() => '?').join(', ');
-	let sql = `SELECT id FROM bookings
-	           WHERE offer_id = ?
-	             AND status IN (${placeholders})
-	             AND date_from < ? AND date_to > ?`;
-	const bindings: (string | number)[] = [offerId, ...BLOCKING_STATUSES, dateTo, dateFrom];
-
-	if (excludeId) {
-		sql += ' AND id != ?';
-		bindings.push(excludeId);
-	}
-
-	sql += ' LIMIT 1';
-
-	return env.portal_db
-		.prepare(sql)
-		.bind(...bindings)
-		.first<{ id: string }>();
-}
 
 function readBoundedString(value: unknown, max: number, label: string): string | Response {
 	if (value === undefined || value === null) return '';

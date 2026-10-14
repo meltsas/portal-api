@@ -5,9 +5,10 @@ import type {
 	TenantFormReviewStatus,
 	TenantFormSubmissionStatus,
 } from '../../types/api';
-import type { FormEventRow, FormSubmissionFileRow, FormSubmissionWithJoinsRow } from '../../types/db';
+import type { FormEventRow, FormSubmissionFileRow, FormSubmissionRow, FormSubmissionWithJoinsRow } from '../../types/db';
 import {
 	toAdminTenantFormAnswers,
+	toAdminTenantFormConversionSummary,
 	toAdminTenantFormEvent,
 	toAdminTenantFormSubmissionFile,
 	toAdminTenantFormSubmissionListItem,
@@ -16,7 +17,8 @@ import { requireAuth } from '../../middleware/requireAuth';
 import { toIsoSeconds } from '../../utils/date';
 import { loadFormStructure, loadFormTexts, type FormValues } from '../../utils/formSchema';
 import { badRequest, jsonResponse, notFound, parseJsonBody } from '../../utils/response';
-import { formEventStatement } from '../../utils/tenantFormInvitations';
+import { formEventStatement, type SqlCondition } from '../../utils/tenantFormInvitations';
+import { allowedReviewStatuses, reviewNotAllowedMessage } from '../../utils/tenantFormReview';
 
 const STATUS_FILTERS: TenantFormSubmissionStatus[] = ['submitted', 'approved', 'rejected', 'archived'];
 const REVIEW_STATUSES: TenantFormReviewStatus[] = ['approved', 'rejected', 'archived'];
@@ -26,11 +28,16 @@ const SUBMISSION_SELECT = `
 	SELECT s.id, s.invitation_id, s.template_id, s.language, s.google_email, s.contact_email, s.phone, s.full_name,
 	       s.planned_arrival, s.planned_departure, s.status, s.reviewed_by_email, s.reviewed_at, s.review_notes,
 	       s.documents_delete_after, s.documents_deleted_at, s.remote_ip, s.user_agent, s.submitted_at,
+	       s.customer_id, s.booking_id,
 	       i.display_name, i.offer_id, o.title AS offer_title,
-	       (SELECT COUNT(*) FROM form_submission_files f WHERE f.submission_id = s.id AND f.status = 'attached') AS file_count
+	       (SELECT COUNT(*) FROM form_submission_files f WHERE f.submission_id = s.id AND f.status = 'attached') AS file_count,
+	       c.full_name AS customer_full_name, b.status AS booking_status, b.date_from AS booking_date_from,
+	       b.date_to AS booking_date_to
 	FROM form_submissions s
 	JOIN form_invitations i ON i.id = s.invitation_id
-	LEFT JOIN offers o ON o.id = i.offer_id`;
+	LEFT JOIN offers o ON o.id = i.offer_id
+	LEFT JOIN customers c ON c.id = s.customer_id
+	LEFT JOIN bookings b ON b.id = s.booking_id`;
 
 export const handleAdminGetTenantFormSubmissions: RouteHandler = async ({ env, url }) => {
 	const statusFilter = url.searchParams.get('status');
@@ -125,6 +132,8 @@ export const handleAdminGetTenantFormSubmission: RouteHandler = async ({ env, re
 		files: files.results.map(toAdminTenantFormSubmissionFile),
 		values,
 		events: events.results.map(toAdminTenantFormEvent),
+		conversion: toAdminTenantFormConversionSummary(row),
+		allowedReviewStatuses: allowedReviewStatuses(row.status as TenantFormSubmissionStatus, row.customer_id !== null),
 	};
 	return jsonResponse(detail);
 };
@@ -139,7 +148,7 @@ export const handleAdminReviewTenantFormSubmission: RouteHandler = async ({ env,
 	if (!body) {
 		return badRequest('Invalid or missing JSON body');
 	}
-	if (!REVIEW_STATUSES.includes(body.status)) {
+	if (body.status !== undefined && !REVIEW_STATUSES.includes(body.status)) {
 		return badRequest(`status must be one of: ${REVIEW_STATUSES.join(', ')}`);
 	}
 
@@ -154,36 +163,60 @@ export const handleAdminReviewTenantFormSubmission: RouteHandler = async ({ env,
 		}
 		reviewNotes = trimmed === '' ? null : trimmed;
 	}
+	if (body.status === undefined && reviewNotes === undefined) {
+		return badRequest('status or reviewNotes is required');
+	}
 
 	const existing = await env.portal_db
-		.prepare(`SELECT id, invitation_id FROM form_submissions WHERE id = ?`)
+		.prepare(`SELECT id, invitation_id, status, customer_id FROM form_submissions WHERE id = ?`)
 		.bind(params.id)
-		.first<{ id: string; invitation_id: string }>();
+		.first<Pick<FormSubmissionRow, 'id' | 'invitation_id' | 'status' | 'customer_id'>>();
 	if (!existing) {
 		return notFound();
 	}
 
-	const reviewedAt = toIsoSeconds(new Date());
-	const notesSql = reviewNotes === undefined ? '' : ', review_notes = ?';
-	const notesBinding = reviewNotes === undefined ? [] : [reviewNotes];
+	const db = env.portal_db;
+	const eventInput = { invitationId: existing.invitation_id, actorType: 'admin' as const, actorRef: admin.email, submissionId: existing.id };
 
-	await env.portal_db.batch([
-		env.portal_db
-			.prepare(
-				`UPDATE form_submissions
-				 SET status = ?, reviewed_by_email = ?, reviewed_at = ?${notesSql}, updated_at = CURRENT_TIMESTAMP
-				 WHERE id = ?`
-			)
-			.bind(body.status, admin.email, reviewedAt, ...notesBinding, existing.id),
+	if (body.status === undefined) {
+		// Notes only: the decision, the reviewer and the review time stay as they are.
 		// Review notes may contain personal details, so they stay out of the event log.
-		formEventStatement(env.portal_db, {
-			invitationId: existing.invitation_id,
-			eventType: body.status,
-			actorType: 'admin',
-			actorRef: admin.email,
-			submissionId: existing.id,
-		}),
-	]);
+		await db.batch([
+			db
+				.prepare(`UPDATE form_submissions SET review_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+				.bind(reviewNotes ?? null, existing.id),
+			formEventStatement(db, { ...eventInput, eventType: 'review_notes_updated' }),
+		]);
+	} else {
+		const status = existing.status as TenantFormSubmissionStatus;
+		const converted = existing.customer_id !== null;
+		const allowed = allowedReviewStatuses(status, converted);
+		if (!allowed.includes(body.status)) {
+			return jsonResponse({ error: reviewNotAllowedMessage(status, converted, body.status), allowedStatuses: allowed }, 409);
+		}
+
+		// Both writes require the state the decision was checked against, so a review cannot race a
+		// conversion or another review. The event goes first, while that state is still in place.
+		const unchanged: SqlCondition = {
+			sql: 'EXISTS (SELECT 1 FROM form_submissions WHERE id = ? AND status = ? AND (customer_id IS NOT NULL) = ?)',
+			bindings: [existing.id, status, converted ? 1 : 0],
+		};
+		const notesSql = reviewNotes === undefined ? '' : ', review_notes = ?';
+		const notesBinding = reviewNotes === undefined ? [] : [reviewNotes];
+		const results = await db.batch([
+			formEventStatement(db, { ...eventInput, eventType: body.status }, unchanged),
+			db
+				.prepare(
+					`UPDATE form_submissions
+					 SET status = ?, reviewed_by_email = ?, reviewed_at = ?${notesSql}, updated_at = CURRENT_TIMESTAMP
+					 WHERE id = ? AND ${unchanged.sql}`
+				)
+				.bind(body.status, admin.email, toIsoSeconds(new Date()), ...notesBinding, existing.id, ...unchanged.bindings),
+		]);
+		if (results[1].meta.changes !== 1) {
+			return jsonResponse({ error: 'The submission was changed meanwhile. Reload it and try again' }, 409);
+		}
+	}
 
 	const row = await env.portal_db
 		.prepare(`${SUBMISSION_SELECT} WHERE s.id = ?`)

@@ -1,10 +1,12 @@
 import type {
 	AdminTenantFormAnswer,
+	AdminTenantFormConversionSummary,
 	AdminTenantFormAnswerSection,
 	AdminTenantFormEvent,
 	AdminTenantFormInvitation,
 	AdminTenantFormSubmissionFile,
 	AdminTenantFormSubmissionListItem,
+	BookingStatus,
 	TenantFormFieldView,
 	TenantFormSchemaResponse,
 	TenantFormSubmissionStatus,
@@ -42,6 +44,8 @@ export function toAdminTenantFormInvitation(row: FormInvitationWithJoinsRow, now
 		googleEmail: row.google_email,
 		leadId: row.lead_id,
 		submissionId: row.submission_id,
+		submissionStatus: row.submission_status as TenantFormSubmissionStatus | null,
+		converted: row.submission_customer_id !== null,
 		createdByEmail: row.created_by_email,
 		openedAt: row.opened_at,
 		authenticatedAt: row.authenticated_at,
@@ -173,6 +177,20 @@ export function toAdminTenantFormSubmissionListItem(row: FormSubmissionWithJoins
 		reviewedAt: row.reviewed_at,
 		remoteIp: row.remote_ip,
 		userAgent: row.user_agent,
+		customerId: row.customer_id,
+		bookingId: row.booking_id,
+	};
+}
+
+export function toAdminTenantFormConversionSummary(row: FormSubmissionWithJoinsRow): AdminTenantFormConversionSummary | null {
+	if (!row.customer_id && !row.booking_id) return null;
+	return {
+		customerId: row.customer_id,
+		customerName: row.customer_full_name,
+		bookingId: row.booking_id,
+		bookingStatus: row.booking_status as BookingStatus | null,
+		bookingDateFrom: row.booking_date_from,
+		bookingDateTo: row.booking_date_to,
 	};
 }
 

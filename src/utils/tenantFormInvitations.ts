@@ -60,20 +60,29 @@ export interface FormEventInput {
 	metadata?: Record<string, unknown> | null;
 }
 
-export function formEventStatement(db: D1Database, event: FormEventInput): D1PreparedStatement {
+/** A SQL condition with its bound values, e.g. `{ sql: 'EXISTS (… WHERE id = ?)', bindings: [id] }`. */
+export interface SqlCondition {
+	sql: string;
+	bindings: (string | number | null)[];
+}
+
+/** With `onlyIf`, the event is written only when the condition holds when the statement runs. */
+export function formEventStatement(db: D1Database, event: FormEventInput, onlyIf?: SqlCondition): D1PreparedStatement {
+	const columns = 'id, invitation_id, submission_id, file_id, event_type, actor_type, actor_ref, metadata_json';
+	const values = [
+		crypto.randomUUID(),
+		event.invitationId,
+		event.submissionId ?? null,
+		event.fileId ?? null,
+		event.eventType,
+		event.actorType,
+		event.actorRef,
+		event.metadata ? JSON.stringify(event.metadata) : null,
+	];
+	if (!onlyIf) {
+		return db.prepare(`INSERT INTO form_events (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(...values);
+	}
 	return db
-		.prepare(
-			`INSERT INTO form_events (id, invitation_id, submission_id, file_id, event_type, actor_type, actor_ref, metadata_json)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-		)
-		.bind(
-			crypto.randomUUID(),
-			event.invitationId,
-			event.submissionId ?? null,
-			event.fileId ?? null,
-			event.eventType,
-			event.actorType,
-			event.actorRef,
-			event.metadata ? JSON.stringify(event.metadata) : null
-		);
+		.prepare(`INSERT INTO form_events (${columns}) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${onlyIf.sql}`)
+		.bind(...values, ...onlyIf.bindings);
 }

@@ -48,6 +48,10 @@ import {
 	handleAdminGetTenantFormSubmissions,
 	handleAdminReviewTenantFormSubmission,
 } from '../handlers/admin/tenantFormSubmissions';
+import {
+	handleAdminConvertTenantFormSubmission,
+	handleAdminGetTenantFormConversionPreview,
+} from '../handlers/admin/tenantFormConversion';
 
 const guards = [requireAdmin()];
 
@@ -93,5 +97,7 @@ export const adminRoutes: Route[] = [
 	get('/api/admin/tenant-forms/submissions', handleAdminGetTenantFormSubmissions, guards),
 	get('/api/admin/tenant-forms/submissions/:id', handleAdminGetTenantFormSubmission, guards),
 	put('/api/admin/tenant-forms/submissions/:id/review', handleAdminReviewTenantFormSubmission, guards),
+	get('/api/admin/tenant-forms/submissions/:id/conversion', handleAdminGetTenantFormConversionPreview, guards),
+	post('/api/admin/tenant-forms/submissions/:id/convert', handleAdminConvertTenantFormSubmission, guards),
 	get('/api/admin/tenant-forms/files/:fileId', handleAdminGetTenantFormFile, guards),
 ];

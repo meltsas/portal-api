@@ -7,7 +7,15 @@ import type {
 	TenantFormSubmitResponse,
 	TenantFormUploadResponse,
 } from '../../src/types/api';
-import { ADMIN_EMAIL, adminSessionCookie, GOOGLE_SUB, insertTestInvitation, insertTestOffer, tenantAccessToken } from '../helpers';
+import {
+	ADMIN_EMAIL,
+	adminSessionCookie,
+	GOOGLE_SUB,
+	insertTestInvitation,
+	insertTestOffer,
+	swedishSubmission,
+	tenantAccessToken,
+} from '../helpers';
 
 const TENANT_API = 'https://example.com/api/tenant-forms';
 const ADMIN_API = 'https://example.com/api/admin/tenant-forms';
@@ -50,45 +58,6 @@ beforeEach(async () => {
 	expect(submit.status).toBe(201);
 	submissionId = ((await submit.json()) as TenantFormSubmitResponse).submissionId;
 });
-
-function swedishSubmission(fileIds: string[]): Record<string, unknown> {
-	return {
-		planned_arrival: '2026-12-01',
-		planned_departure: '2027-01-15',
-		first_name: 'Åsa',
-		last_name: 'Exempel',
-		sex: 'female',
-		date_of_birth: '1980-05-20',
-		citizenship: 'Svensk',
-		document_type: 'passport',
-		document_number: 'X1234567',
-		phone: '+46 70 123 45 67',
-		contact_email: 'asa@example.com',
-		address_line1: 'Testgatan 1',
-		city: 'Uppsala',
-		postcode: '753 10',
-		country: 'Sverige',
-		other_guests: [
-			{
-				first_name: 'Barn',
-				last_name: 'Exempel',
-				sex: 'male',
-				date_of_birth: '2015-03-01',
-				citizenship: 'Svensk',
-				document_type: 'id_card',
-				document_number: 'Y7654321',
-				relationship: 'child',
-			},
-		],
-		stay_purpose: 'other',
-		stay_purpose_other: 'Språkkurs',
-		employment_type: 'pensioner',
-		id_documents: fileIds,
-		video_call_willing: 'yes',
-		video_call_time: 'Kvällar',
-		privacy_consent: true,
-	};
-}
 
 async function adminFetch(path: string, init: RequestInit = {}): Promise<Response> {
 	return SELF.fetch(`${ADMIN_API}${path}`, {
@@ -209,6 +178,19 @@ describe('PUT /api/admin/tenant-forms/submissions/:id/review', () => {
 		return adminFetch(`/submissions/${submissionId}/review`, { method: 'PUT', body: JSON.stringify(body) });
 	}
 
+	function submissionRow() {
+		return env.portal_db
+			.prepare(`SELECT status, reviewed_by_email, reviewed_at, review_notes FROM form_submissions WHERE id = ?`)
+			.bind(submissionId)
+			.first();
+	}
+
+	/** What a conversion leaves behind; the conversion itself is tested in adminConversion.spec.ts. */
+	async function markConverted(): Promise<void> {
+		await env.portal_db.prepare(`INSERT INTO customers (id, full_name, email) VALUES ('cust_1', 'Åsa Exempel', 'asa@example.com')`).run();
+		await env.portal_db.prepare(`UPDATE form_submissions SET customer_id = 'cust_1' WHERE id = ?`).bind(submissionId).run();
+	}
+
 	it('records the decision, the reviewer and the notes', async () => {
 		const response = await review({ status: 'approved', reviewNotes: ' Video call done ' });
 		expect(response.status).toBe(200);
@@ -218,13 +200,8 @@ describe('PUT /api/admin/tenant-forms/submissions/:id/review', () => {
 			reviewNotes: 'Video call done',
 		});
 
-		const keepsNotes = (await (await review({ status: 'archived' })).json()) as { reviewNotes: string | null };
+		const keepsNotes = (await (await review({ status: 'rejected' })).json()) as { reviewNotes: string | null };
 		expect(keepsNotes.reviewNotes).toBe('Video call done');
-
-		const clearsNotes = (await (await review({ status: 'rejected', reviewNotes: '' })).json()) as {
-			reviewNotes: string | null;
-		};
-		expect(clearsNotes.reviewNotes).toBeNull();
 
 		const events = await eventsOf('approved');
 		expect(events.results).toEqual([
@@ -232,8 +209,67 @@ describe('PUT /api/admin/tenant-forms/submissions/:id/review', () => {
 		]);
 	});
 
+	it('edits only the notes when no status is sent', async () => {
+		await review({ status: 'approved', reviewNotes: 'Video call done' });
+		const before = await submissionRow();
+
+		const response = await review({ reviewNotes: '' });
+		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject({ status: 'approved', reviewNotes: null });
+
+		const after = await submissionRow();
+		expect(after).toEqual({ ...before, review_notes: null });
+		expect((await eventsOf('review_notes_updated')).results).toHaveLength(1);
+		expect((await eventsOf('approved')).results).toHaveLength(1);
+	});
+
+	it.each([
+		['approve twice', [['approved', 200], ['approved', 409]]],
+		['reject, then reconsider', [['rejected', 200], ['approved', 200]]],
+		['approve, reject, archive, then nothing', [['approved', 200], ['rejected', 200], ['archived', 200], ['approved', 409]]],
+		['archive is final', [['archived', 200], ['rejected', 409], ['archived', 409]]],
+	] as const)('allows only valid decisions: %s', async (_label, steps) => {
+		for (const [status, expected] of steps) {
+			expect((await review({ status })).status).toBe(expected);
+		}
+	});
+
+	it('keeps the notes of an archived submission editable', async () => {
+		await review({ status: 'archived' });
+		const response = await review({ reviewNotes: 'Stay finished' });
+		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject({ status: 'archived', reviewNotes: 'Stay finished' });
+	});
+
+	it('only archives a converted submission', async () => {
+		await review({ status: 'approved' });
+		await markConverted();
+
+		const rejected = await review({ status: 'rejected' });
+		expect(rejected.status).toBe(409);
+		expect(await rejected.json()).toEqual({
+			error: 'A converted submission can only be archived. Cancel its booking in Bookings if the stay will not happen',
+			allowedStatuses: ['archived'],
+		});
+		expect((await review({ status: 'archived' })).status).toBe(200);
+	});
+
+	it('lists the possible decisions in the detail', async () => {
+		const allowed = async () =>
+			((await (await adminFetch(`/submissions/${submissionId}`)).json()) as AdminTenantFormSubmissionDetail).allowedReviewStatuses;
+
+		expect(await allowed()).toEqual(['approved', 'rejected', 'archived']);
+		await review({ status: 'approved' });
+		expect(await allowed()).toEqual(['rejected', 'archived']);
+		await markConverted();
+		expect(await allowed()).toEqual(['archived']);
+		await review({ status: 'archived' });
+		expect(await allowed()).toEqual([]);
+	});
+
 	it.each([
 		['an unknown status', { status: 'submitted' }],
+		['neither a status nor notes', {}],
 		['notes that are too long', { status: 'approved', reviewNotes: 'x'.repeat(2001) }],
 		['notes of the wrong type', { status: 'approved', reviewNotes: 5 }],
 	])('rejects %s', async (_label, body) => {
