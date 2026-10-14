@@ -21,6 +21,20 @@
 			"bucket_name": "costa-seasons-tenant-documents"
 		}
 	],
+	// Workers Rate Limiting for the tenant form, see docs/cloudflare-operations.md. Bindings with the
+	// same namespace_id share counters across the account, so keep these ids unique.
+	"ratelimits": [
+		{
+			"name": "TENANT_FORM_IP_LIMITER",
+			"namespace_id": "41001",
+			"simple": { "limit": 20, "period": 60 }
+		},
+		{
+			"name": "TENANT_FORM_SESSION_LIMITER",
+			"namespace_id": "41002",
+			"simple": { "limit": 60, "period": 60 }
+		}
+	],
 	"vars": {
 		"ENVIRONMENT": "production",
 		"GOOGLE_CLIENT_ID": "296921667290-ppud7lh91ojm5ujosof5394t13o7jtv2.apps.googleusercontent.com",

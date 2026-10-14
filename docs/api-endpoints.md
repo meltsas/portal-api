@@ -1328,6 +1328,13 @@ Põhireeglid:
   massiiv, failiväljad on üleslaaditud failide `id`-de massiiv ja „other“ valiku vabatekst on
   võtmes `<field_key>_other`.
 - **Request bodyd tenant formi route'idel ei logita** (`requestLogger`).
+- **Rate limiting** (Workers Rate Limiting, loendurid 60 s akendes, iga Cloudflare'i asukoha kohta
+  eraldi ja ligikaudsed):
+  - `POST /invitations/resolve` ja `POST /auth/google`: kokku 20 päringut minutis ühelt IP-lt
+    (`CF-Connecting-IP`);
+  - kõik Bearer tokeniga endpointid: 60 päringut minutis ühe invitationi kohta. Loetakse ainult
+    kehtiva allkirjaga tokeniga päringuid, enne D1 päringut;
+  - ületamisel `429` `{ "error": "Too many requests" }` ja header `Retry-After: 60`. IP-d ei logita.
 
 Valideerimisvigade kuju (`400`):
 

@@ -7,6 +7,7 @@ import {
 	unavailableInvitationResponse,
 } from '../utils/tenantFormInvitations';
 import { verifyTenantFormToken } from '../utils/tenantFormToken';
+import { tooManyRequests } from './rateLimit';
 
 export interface TenantFormAccess {
 	invitation: TenantFormInvitationAccessRow;
@@ -19,7 +20,8 @@ const BEARER_PATTERN = /^Bearer ([A-Za-z0-9_.-]+)$/;
 /**
  * Call first in every tenant form handler that needs a signed-in tenant. Checks the Bearer
  * token and the invitation's current state on every request, so revoking or submitting
- * takes effect immediately.
+ * takes effect immediately. Requests with a valid token count against the per-invitation
+ * rate limit before any D1 read.
  */
 export async function requireTenantFormAccess(request: Request, env: Env): Promise<TenantFormAccess | Response> {
 	const match = request.headers.get('Authorization')?.match(BEARER_PATTERN);
@@ -27,6 +29,9 @@ export async function requireTenantFormAccess(request: Request, env: Env): Promi
 
 	const payload = await verifyTenantFormToken(match[1], env.TENANT_FORM_SECRET, Math.floor(Date.now() / 1000));
 	if (!payload) return unauthorized();
+
+	const { success } = await env.TENANT_FORM_SESSION_LIMITER.limit({ key: payload.invitationId });
+	if (!success) return tooManyRequests();
 
 	const invitation = await findInvitationById(env.portal_db, payload.invitationId);
 	if (!invitation || invitation.google_subject !== payload.subject) return unauthorized();

@@ -891,3 +891,34 @@ D1, R2, migrations, seed data and deploy commands are documented here:
 
 - `docs/cloudflare-operations.md`
 ```
+
+---
+
+## 23. Rate limiting
+
+Tenant formi avalikud endpointid kasutavad Workers Rate Limiting bindinguid (`wrangler.jsonc` →
+`ratelimits`). Eraldi ressurssi pole vaja luua, bindingud tekivad deploy'ga.
+
+| Binding | Limiit | Võti | Kus |
+|---|---|---|---|
+| `TENANT_FORM_IP_LIMITER` | 20 / 60 s | `CF-Connecting-IP` | `POST /api/tenant-forms/invitations/resolve` ja `POST /api/tenant-forms/auth/google` (`src/routes/tenantForms.ts`) |
+| `TENANT_FORM_SESSION_LIMITER` | 60 / 60 s | invitationi id kehtivast access tokenist | `requireTenantFormAccess`, st kõik Bearer tokeniga endpointid |
+
+- Ületamisel vastab API `429` ja `Retry-After: 60`. IP-d ei logita.
+- Periood saab olla ainult 10 või 60 s. Loendurid on iga Cloudflare'i asukoha kohta eraldi ja
+  ligikaudsed, seega see on kuritarvituse pidur, mitte täpne arvestus.
+- Worker käivitub ka blokeeritud päringu korral, seega Free plaani 100 000 päringu päevalimiiti
+  see ei kaitse. Blokeeritud päring ei jõua aga D1, R2 ega Google'ini.
+- Sama `namespace_id`-ga bindingud jagavad loendureid kogu kontol. Selle Workeri id-d on `41001` ja
+  `41002`, teistes Workerites kasuta muid.
+- Vaja on Wrangleri versiooni 4.36.0 või uuemat.
+- Lokaalselt (`wrangler dev`, Vitest) simuleerib Miniflare limiite mälus fikseeritud akendega.
+- Dokumentatsioon ei nimeta plaanipiirangut ega hinda. Kui Free plaan bindingut ei luba, katkeb
+  `wrangler deploy` veaga ja toodangus jääb tööle eelmine versioon.
+
+Limiidi muutmiseks muuda `simple.limit` väärtust `wrangler.jsonc`-s ja deploy'i Worker. Bindingu
+nime muutmisel jooksuta ka:
+
+```bash
+npm run cf-typegen
+```
