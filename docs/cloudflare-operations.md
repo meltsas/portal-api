@@ -913,8 +913,8 @@ Tenant formi avalikud endpointid kasutavad Workers Rate Limiting bindinguid (`wr
   `41002`, teistes Workerites kasuta muid.
 - Vaja on Wrangleri versiooni 4.36.0 või uuemat.
 - Lokaalselt (`wrangler dev`, Vitest) simuleerib Miniflare limiite mälus fikseeritud akendega.
-- Dokumentatsioon ei nimeta plaanipiirangut ega hinda. Kui Free plaan bindingut ei luba, katkeb
-  `wrangler deploy` veaga ja toodangus jääb tööle eelmine versioon.
+- Dokumentatsioon ei nimeta plaanipiirangut ega hinda. Free plaanis õnnestus deploy bindingutega
+  2026-10-14.
 
 Limiidi muutmiseks muuda `simple.limit` väärtust `wrangler.jsonc`-s ja deploy'i Worker. Bindingu
 nime muutmisel jooksuta ka:
