@@ -439,6 +439,26 @@ npx wrangler r2 bucket domain list costa-seasons-tenant-documents
 
 Oodatud vastused: "Public access via the r2.dev URL is disabled" ja "no custom domains".
 
+#### Lifecycle reegel (turvavõrk)
+
+Dokumendid kustutab rakendus ise (§21 „Tenant formi andmete säilitamine“). Lifecycle reegel kustutab
+igaks juhuks kõik üle 540 päeva vanad objektid prefiksi `tenant-forms/` all, kui rakendus mõne faili
+unustaks. 540 päeva peab jääma pikemaks kui pikim tavaline säilitamine (nt 9 kuud ette täidetud
+6-kuuline peatumine + 30 päeva). Objektid kustuvad tavaliselt 24 h jooksul pärast tähtaega
+([R2 object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)).
+
+Reegli lisamine (toodangu muudatus, ainult kinnitusega):
+
+```bash
+npx wrangler r2 bucket lifecycle add costa-seasons-tenant-documents tenant-forms-safety-net tenant-forms/ --expire-days 540
+```
+
+Kontroll:
+
+```bash
+npx wrangler r2 bucket lifecycle list costa-seasons-tenant-documents
+```
+
 Näited võimalikest bucketitest selle projekti puhul:
 
 ```text
@@ -857,6 +877,47 @@ Kontrollid (`evaluatePublishConditions` järjekorras):
 8. `enabled === true`.
 9. Kui `dryRun === true` → dry_run; muidu `GITHUB_TOKEN` olemas.
 10. Päris commit.
+
+### Tenant formi andmete säilitamine (cleanup)
+
+Sama `7 * * * *` cron käivitab kord ööpäevas, kell 04:07 Madridi aja järgi,
+`runScheduledTenantFormsCleanup` (`src/scheduled/tenantFormsCleanup.ts`). Reeglid on roadmapis
+(faas 10, L1–L10):
+
+- **Peatumisega vorm:** dokumendid kustuvad päev pärast `documents_delete_after`
+  (planeeritud lahkumine + 30 päeva).
+- **Peatumiseta vorm:** tagasilükatud või konverteerimata arhiveeritud vormi dokumendid kustuvad 30
+  päeva pärast otsust.
+- **Saatmata andmed:** aegunud, tühistatud või saadetud kutsete mustandid ja saatmata failid.
+- **Mis alles jääb:** faili rida jääb (staatus `deleted`, failinimi tühjendatud). Sündmused on
+  `documents_purged` ja `unsubmitted_data_deleted`.
+- **Ühe käivituse piirang:** kuni 20 submissionit ja 20 kutset, ülejäänu järgmisel päeval. Kulu on
+  umbes 4 D1 päringut, 1 R2 `delete` ja 1 D1 batch, mis jagavad sama 50 subrequesti piiri ilmaandmete
+  fetch'iga.
+
+**Dry-run:** `wrangler.jsonc` `vars.TENANT_FORM_CLEANUP_DRY_RUN` on `true`. Siis logib cleanup ainult,
+mida ta kustutaks. Midagi ei kustutata, kui muutuja pole täpselt `false`.
+
+1. Deploy dry-run'iga ja vaata järgmise öö logi (`[scheduled] tenant-forms-cleanup DRY RUN…`).
+   Logis on ainult arvud ja submissionite/kutsete ID-d.
+2. Kui ID-d on õiged, muuda `wrangler.jsonc`-s `"TENANT_FORM_CLEANUP_DRY_RUN": false` ja deploy.
+
+Öise käivituse logi leiab hiljem Cloudflare'i dashboard'ist: Workers & Pages → `portal-api` → Logs
+(observability on `wrangler.jsonc`-s sees), otsing `tenant-forms-cleanup`. Reaalajas jälgimiseks:
+
+```bash
+npx wrangler tail portal-api --search tenant-forms-cleanup
+```
+
+**Lokaalselt** (`ENVIRONMENT=development`) jookseb cleanup iga käsitsi käivitatud `7 * * * *` cron'iga,
+mitte ainult kell 4. Päris kustutamiseks lisa `.dev.vars`-i `TENANT_FORM_CLEANUP_DRY_RUN=false`.
+
+```bash
+curl "http://localhost:8787/__scheduled?cron=7+*+*+*+*"
+```
+
+Admin saab dokumendid kustutada ka kohe: `POST /api/admin/tenant-forms/submissions/:id/purge-documents`
+(admin UI submissioni lehel „Delete documents now“).
 
 ### Uue välise andmeallika lisamine
 

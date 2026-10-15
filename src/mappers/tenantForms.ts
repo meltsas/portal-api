@@ -203,6 +203,7 @@ export function toAdminTenantFormSubmissionFile(row: FormSubmissionFileRow): Adm
 		sizeBytes: row.size_bytes,
 		status: row.status,
 		uploadedAt: row.uploaded_at,
+		deletedAt: row.deleted_at,
 	};
 }
 

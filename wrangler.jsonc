@@ -39,6 +39,9 @@
 		"ENVIRONMENT": "production",
 		"GOOGLE_CLIENT_ID": "296921667290-ppud7lh91ojm5ujosof5394t13o7jtv2.apps.googleusercontent.com",
 		"TENANT_FORM_URL_BASE": "https://costaseasons.com/tenant-details/",
+		// Daily tenant form retention cleanup only logs what it would delete until this is false.
+		// See docs/cloudflare-operations.md before switching it off.
+		"TENANT_FORM_CLEANUP_DRY_RUN": true,
 
 		"GITHUB_REPO": "meltsas/non-touristic-rentals",
 		"GITHUB_EXPORT_ENABLED": true,
@@ -60,7 +63,8 @@
 	// Scheduled (cron) triggers. Keep cron expressions in sync with the
 	// constants in `src/scheduled/handlers.ts` — the scheduled() handler
 	// dispatches on `controller.cron`. Cron expressions are evaluated in UTC.
-	//   "7 * * * *"   hourly external data fetch (Open-Meteo, etc.)
+	//   "7 * * * *"   hourly external data fetch (Open-Meteo, etc.); at 04:07 Madrid
+	//                 time also the daily tenant form retention cleanup.
 	//   "9 * * * *"   hourly trigger for the smart GitHub export placeholder.
 	//                 Handler gates against an `Europe/Madrid` publish window
 	//                 so only ~9 of 24 daily firings actually pass the guard;

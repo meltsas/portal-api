@@ -1,6 +1,7 @@
 import type { RouteHandler } from '../../router/types';
 import type {
 	AdminTenantFormSubmissionDetail,
+	PurgeTenantFormDocumentsResponse,
 	ReviewTenantFormSubmissionPayload,
 	TenantFormReviewStatus,
 	TenantFormSubmissionStatus,
@@ -19,6 +20,7 @@ import { loadFormStructure, loadFormTexts, type FormValues } from '../../utils/f
 import { badRequest, jsonResponse, notFound, parseJsonBody } from '../../utils/response';
 import { formEventStatement, type SqlCondition } from '../../utils/tenantFormInvitations';
 import { allowedReviewStatuses, reviewNotAllowedMessage } from '../../utils/tenantFormReview';
+import { findAttachedFiles, purgeDocumentsStatements } from '../../utils/tenantFormDocuments';
 
 const STATUS_FILTERS: TenantFormSubmissionStatus[] = ['submitted', 'approved', 'rejected', 'archived'];
 const REVIEW_STATUSES: TenantFormReviewStatus[] = ['approved', 'rejected', 'archived'];
@@ -278,6 +280,42 @@ export const handleAdminGetTenantFormFile: RouteHandler = async ({ env, request,
 			'Content-Security-Policy': "sandbox; default-src 'none'",
 		},
 	});
+};
+
+/** Deletes the submission's documents now, before their retention date. Allowed in every status. */
+export const handleAdminPurgeTenantFormDocuments: RouteHandler = async ({ env, request, params }) => {
+	const admin = await requireAuth(request, env);
+	if (!admin) {
+		return jsonResponse({ error: 'Unauthorized' }, 401);
+	}
+
+	const submission = await env.portal_db
+		.prepare(`SELECT id, invitation_id FROM form_submissions WHERE id = ?`)
+		.bind(params.id)
+		.first<Pick<FormSubmissionRow, 'id' | 'invitation_id'>>();
+	if (!submission) {
+		return notFound();
+	}
+
+	const files = await findAttachedFiles(env.portal_db, [submission.id]);
+	if (files.length === 0) {
+		return jsonResponse({ error: 'Documents have already been deleted' }, 409);
+	}
+
+	await env.tenant_files.delete(files.map((file) => file.r2_key));
+	const deletedAt = toIsoSeconds(new Date());
+	await env.portal_db.batch(
+		purgeDocumentsStatements(
+			env.portal_db,
+			[{ submissionId: submission.id, invitationId: submission.invitation_id }],
+			files,
+			deletedAt,
+			{ type: 'admin', ref: admin.email }
+		)
+	);
+
+	const response: PurgeTenantFormDocumentsResponse = { submissionId: submission.id, fileCount: files.length, documentsDeletedAt: deletedAt };
+	return jsonResponse(response);
 };
 
 // --- Helpers ---

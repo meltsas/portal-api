@@ -11,6 +11,7 @@ import {
 	runHourlyFetch,
 	runSmartGithubExport,
 } from './scheduled/handlers';
+import { runScheduledTenantFormsCleanup } from './scheduled/tenantFormsCleanup';
 
 const router = createRouter([...publicRoutes, ...authRoutes, ...adminRoutes, ...tenantFormRoutes], {
 	middleware: [requestLogger(), cors()],
@@ -26,6 +27,8 @@ export default {
 		switch (controller.cron) {
 			case CRON_HOURLY_FETCH:
 				ctx.waitUntil(runHourlyFetch(env));
+				// Runs only once a day (Madrid night), see tenantFormsCleanup.ts.
+				ctx.waitUntil(runScheduledTenantFormsCleanup(env));
 				return;
 			case CRON_SMART_GITHUB_EXPORT:
 				ctx.waitUntil(runSmartGithubExport(env));

@@ -1746,6 +1746,9 @@ Lisaks listi väljadele: `templateId`, `googleEmail` (kontrollitud Google konto)
 `conversion` on `null` kuni konversioonini, seejärel
 `{ customerId, customerName, bookingId, bookingStatus, bookingDateFrom, bookingDateTo }`.
 
+`files` sisaldab ka kustutatud faile: `status: "deleted"`, `deletedAt` täidetud ja `originalFilename`
+tühi (failinimes võib olla isiku nimi). Vaadata ja alla laadida saab ainult `attached` faile.
+
 `allowedReviewStatuses` on praegu võimalikud otsused (vt `PUT …/review`); arhiveeritud vormil tühi.
 
 `sections` näide:
@@ -1808,6 +1811,22 @@ Seega ei saa samaaegne konversioon ja tagasilükkamine jätta vormi seisu „rej
 **Response 200:** uuendatud rida koos `reviewedByEmail` ja `reviewNotes`-iga.
 **Response 409:** otsus pole praeguses seisus lubatud (`{ error, allowedStatuses }`) või submission
 muutus vahepeal. **400** / **404**.
+
+### `POST /api/admin/tenant-forms/submissions/:id/purge-documents`
+
+Kustutab submissioni dokumendid (`attached` failid) kohe, enne säilitamise tähtaega. Lubatud igas
+staatuses. Esmalt kustutatakse R2 objektid, seejärel märgitakse failid `deleted` (failinimi
+tühjendatakse), submissionil täidetakse `documentsDeletedAt` ja kirjutatakse sündmus `documents_purged`
+(`{ fileCount }`, tegija admin). Sama loogikat kasutab öine cleanup (`docs/cloudflare-operations.md`
+§21).
+
+**Response 200:**
+
+```json
+{ "submissionId": "…", "fileCount": 2, "documentsDeletedAt": "2026-11-20T10:15:00Z" }
+```
+
+**409:** dokumendid on juba kustutatud. **404:** tundmatu submission.
 
 ### `GET /api/admin/tenant-forms/files/:fileId`
 
@@ -1979,6 +1998,7 @@ konverteeritud), nii et kahest samaaegsest konversioonist läheb läbi ainult ü
 | `PUT`    | `/api/admin/tenant-forms/submissions/:id/review`  | admin  | Approve / reject / archive + märkmed           |
 | `GET`    | `/api/admin/tenant-forms/submissions/:id/conversion` | admin | Konversiooni eelvaade (customer, booking, vasted, kattuvused) |
 | `POST`   | `/api/admin/tenant-forms/submissions/:id/convert` | admin  | Loo/uuenda customer ja loo booking             |
+| `POST`   | `/api/admin/tenant-forms/submissions/:id/purge-documents` | admin | Kustuta dokumendid kohe          |
 | `GET`    | `/api/admin/tenant-forms/files/:fileId`           | admin  | Saadetud faili striimimine (logitakse)         |
 
 ---

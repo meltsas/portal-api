@@ -726,11 +726,19 @@ export interface AdminTenantFormAnswerSection {
 export interface AdminTenantFormSubmissionFile {
 	id: string;
 	fieldKey: string;
+	/** Empty once the file is deleted: file names may contain a person's name. */
 	originalFilename: string;
 	mimeType: string;
 	sizeBytes: number;
 	status: string;
 	uploadedAt: string;
+	deletedAt: string | null;
+}
+
+export interface PurgeTenantFormDocumentsResponse {
+	submissionId: string;
+	fileCount: number;
+	documentsDeletedAt: string;
 }
 
 export interface AdminTenantFormSubmissionDetail extends AdminTenantFormSubmissionListItem {
