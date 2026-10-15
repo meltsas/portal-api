@@ -21,6 +21,14 @@
 			"bucket_name": "costa-seasons-tenant-documents"
 		}
 	],
+	// Cloudflare Email Service (beta). On Workers Free it can only send to destination addresses verified
+	// in Email Routing; used for admin notifications. See docs/cloudflare-operations.md.
+	"send_email": [
+		{
+			"name": "EMAIL",
+			"allowed_sender_addresses": ["noreply@costaseasons.com"]
+		}
+	],
 	// Workers Rate Limiting for the tenant form, see docs/cloudflare-operations.md. Bindings with the
 	// same namespace_id share counters across the account, so keep these ids unique.
 	"ratelimits": [
@@ -42,6 +50,8 @@
 		// Daily tenant form retention cleanup only logs what it would delete until this is false.
 		// See docs/cloudflare-operations.md before switching it off.
 		"TENANT_FORM_CLEANUP_DRY_RUN": true,
+		"NOTIFICATION_FROM_EMAIL": "noreply@costaseasons.com",
+		"ADMIN_UI_URL": "https://portal-api-admin-ui.pages.dev",
 
 		"GITHUB_REPO": "meltsas/non-touristic-rentals",
 		"GITHUB_EXPORT_ENABLED": true,

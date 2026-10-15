@@ -983,3 +983,55 @@ nime muutmisel jooksuta ka:
 ```bash
 npm run cf-typegen
 ```
+
+---
+
+## 24. E-posti teavitused (Cloudflare Email Service)
+
+Uue tenant formi järel saadab Worker igale adminile (`src/utils/adminAllowlist.ts` `ADMIN_EMAILS`)
+kirja „New Form Submission from {nimi}“. Kood on failis `src/notifications/adminNotify.ts`, binding
+`EMAIL` ja muutujad `NOTIFICATION_FROM_EMAIL` ning `ADMIN_UI_URL` on `wrangler.jsonc`-s. Variantide
+võrdlus on failis `non-touristic-rentals/docs/seasona-rental-details-form/teavitused-variandid.md`.
+
+- **Plaan ja hind:** Email Service on beta. Workers Free plaanil saab saata ainult Email Routingus
+  **kinnitatud sihtaadressidele**. See on tasuta ega loe kvooti. Suvalisele aadressile (nt huvilistele)
+  saatmine vajab Workers Paid plaani
+  ([pricing](https://developers.cloudflare.com/email-service/platform/pricing/)).
+- **Saatja:** `noreply@costaseasons.com`. Binding lubab ainult seda saatjat (`allowed_sender_addresses`).
+- **Kirja sisu:** nimi, Google'i konto, offer, aeg ja link. Dokumente ega muid vastuseid kirjas pole.
+
+### Seadistus (ühekordne)
+
+1. **Kinnita admini aadress sihtaadressiks:** dashboard → Email → Email Routing → Destination
+   addresses → Add (või kontrolli, et see on seal staatusega „Verified“). Cloudflare saadab
+   kinnituskirja.
+2. **Vajadusel onboard'i domeen:** kui logis on `E_SENDER_NOT_VERIFIED` või
+   `E_SENDER_DOMAIN_NOT_AVAILABLE`, ava dashboard → Email → Email Sending → Onboard Domain →
+   `costaseasons.com`. See lisab `cf-bounce` alla MX, SPF, DKIM ja DMARC kirjed.
+3. **Deploy.**
+4. **Esimene kiri võib Gmailis minna rämpsposti:** märgi „Not spam“ ja lisa filter.
+
+**Uue admini lisamine:** lisa email `ADMIN_EMAILS`-i, kinnita see Email Routingus sihtaadressiks ja tee
+deploy.
+
+### Vead ja logid
+
+Kirja viga ei mõjuta vormi saatmist. Worker logib ainult submissioni ID ja veakoodi:
+
+```text
+[tenant-forms] admin notification for submission <id> failed: E_RECIPIENT_NOT_ALLOWED
+```
+
+Logi otsimine: dashboard → Workers & Pages → `portal-api` → Observability, otsing
+`admin notification`. Sagedasemad koodid:
+
+- `E_RECIPIENT_NOT_ALLOWED`: aadress pole kinnitatud sihtaadress;
+- `E_SENDER_NOT_VERIFIED`, `E_SENDER_DOMAIN_NOT_AVAILABLE`: domeen pole Email Sending'us onboard'itud;
+- `E_DAILY_LIMIT_EXCEEDED`: päevane kvoot (kinnitatud aadresse see ei tohiks puudutada).
+
+### Lokaalselt
+
+`wrangler dev` ja testid kasutavad Miniflare'i simulaatorit. **Kirju ei saadeta.** Sõnum kontrollitakse
+(nt lubatud saatja), salvestatakse ajutisse faili ja logitakse terminali („send_email binding called
+with MessageBuilder“). Et lokaalse kirja link viiks lokaalsesse admin UI-sse, lisa `.dev.vars`-i
+`ADMIN_UI_URL=http://localhost:5173` (vt `.dev.vars.example`).

@@ -12,6 +12,7 @@ import {
 } from '../../utils/formSchema';
 import { jsonResponse, parseJsonBodyWithLimit } from '../../utils/response';
 import { formEventStatement } from '../../utils/tenantFormInvitations';
+import { notifyAdminsOfSubmission } from '../../notifications/adminNotify';
 
 const MAX_SUBMIT_BODY_BYTES = 200_000;
 const MAX_USER_AGENT_LENGTH = 1000;
@@ -23,7 +24,7 @@ const DOCUMENT_RETENTION_DAYS = 30;
  * then creates the submission, attaches the files, closes the invitation and deletes the draft
  * in one D1 batch (all or nothing).
  */
-export const handleSubmitTenantForm: RouteHandler = async ({ env, request }) => {
+export const handleSubmitTenantForm: RouteHandler = async ({ env, ctx, request }) => {
 	const access = await requireTenantFormAccess(request, env);
 	if (access instanceof Response) {
 		return access;
@@ -124,6 +125,17 @@ export const handleSubmitTenantForm: RouteHandler = async ({ env, request }) => 
 		}
 		throw error;
 	}
+
+	// After the response; a failed email never affects the submission.
+	ctx.waitUntil(
+		notifyAdminsOfSubmission(env, {
+			submissionId,
+			fullName: fullName(values),
+			googleEmail: invitation.google_email ?? '',
+			offerTitle: invitation.offer_title,
+			submittedAt,
+		})
+	);
 
 	const response: TenantFormSubmitResponse = { submissionId, submittedAt };
 	return jsonResponse(response, 201);

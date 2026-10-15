@@ -1538,6 +1538,10 @@ Valideerib kogu vormi ja kontrollib, et iga failiväljal olev `id` on selle invi
 läheb `submitted` olekusse, mustand kustutatakse ja kirjutatakse sündmus `submitted`.
 Dokumentide kustutamise aeg (`documents_delete_after`) on `planned_departure` + 30 päeva.
 
+Pärast vastust (`ctx.waitUntil`) saadetakse igale `ADMIN_EMAILS` aadressile e-kiri „New Form Submission
+from {nimi}“. Kirjas on nimi, Google'i konto, offer, saatmise aeg ja link admin UI submissioni lehele.
+Kirja viga ei mõjuta vastust (vt `docs/cloudflare-operations.md` §24).
+
 **Request body (max 200 KB):**
 
 ```json
