@@ -9,6 +9,7 @@ import type {
 	TextKeySpec,
 	VisibleIf,
 } from '../utils/formSchema';
+import type { StructureProblem } from '../utils/formStructureEditing';
 import type { TextChangeError } from '../utils/formTextChanges';
 import type { CustomerDocumentType, CustomerSex } from '../utils/customerFields';
 
@@ -475,13 +476,28 @@ export interface TenantFormLanguageReadiness {
 	total: number;
 }
 
+/** Only a draft can be changed; new invitations use the active version; archived versions keep serving their old links. */
+export type TenantFormTemplateStatus = 'draft' | 'active' | 'archived';
+
 export interface AdminTenantFormTemplateListItem {
 	id: string;
 	templateKey: string;
 	version: number;
-	status: string;
+	status: TenantFormTemplateStatus;
 	baseLanguage: string;
 	languages: TenantFormLanguageReadiness[];
+	/** The version this one was copied from. */
+	basedOnTemplateId: string | null;
+	createdByEmail: string | null;
+	/** Last time this version became active (also when restored). */
+	activatedAt: string | null;
+	activatedByEmail: string | null;
+	/** Changes with every structure save and activation. Saving and activating send it back. */
+	revision: number;
+	invitationCount: number;
+	submissionCount: number;
+	createdAt: string;
+	updatedAt: string;
 }
 
 export interface AdminTenantFormTemplateDetail extends AdminTenantFormTemplateListItem {
@@ -489,6 +505,36 @@ export interface AdminTenantFormTemplateDetail extends AdminTenantFormTemplateLi
 	textKeys: TextKeySpec[];
 	/** language → text key → text. Every supported language is present, possibly empty. */
 	texts: Record<FormLanguage, Record<string, string>>;
+	/** Draft only: what still blocks publishing. Empty for active and archived versions. */
+	problems: StructureProblem[];
+}
+
+export interface SaveTenantFormStructurePayload {
+	revision: number;
+	sections: FormSection[];
+	/** Usually the English texts of new sections, fields and options; same rules as the translations endpoint. */
+	texts?: TenantFormTextChange[];
+}
+
+export interface ActivateTenantFormTemplatePayload {
+	revision: number;
+}
+
+/** 400 of a structure save whose structure can not be stored. */
+export interface TenantFormStructureErrorResponse {
+	error: string;
+	errors: StructureProblem[];
+}
+
+/** 400 of an activation while the version still has problems. */
+export interface TenantFormTemplateProblemsResponse {
+	error: string;
+	problems: StructureProblem[];
+}
+
+export interface DeleteTenantFormTemplateResponse {
+	id: string;
+	deleted: true;
 }
 
 export interface TenantFormTextChange {

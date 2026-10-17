@@ -1358,7 +1358,7 @@ Valideerimisvigade kuju (`400`):
 ```
 
 Võimalikud koodid: `unknown_field`, `required`, `invalid_type`, `too_short`, `too_long`,
-`invalid_email`, `invalid_phone`, `invalid_date`, `date_in_future`, `date_order`, `stay_too_short`,
+`invalid_email`, `invalid_phone`, `invalid_url`, `invalid_date`, `date_in_future`, `date_order`, `stay_too_short`,
 `out_of_range`, `invalid_option`, `too_many_items`, `too_few_files`, `too_many_files`,
 `duplicate_file`, `invalid_file`.
 
@@ -1561,42 +1561,79 @@ Kirja viga ei mõjuta vastust (vt `docs/cloudflare-operations.md` §24).
 Kõik route'id on `requireAdmin()` all (jaotis 6). Admini email võetakse sessionist ja kirjutatakse
 `created_by_email`, `reviewed_by_email` ja `form_events.actor_ref` väljadele.
 
+### Template'i versioonid
+
+Vormi struktuuri (väljad, valikud, kohustuslikkus, järjekord) muudetakse ainult mustandis:
+
+- **`draft`:** muudetav, sellele ei saa kutset luua. Ühe `templateKey` kohta on korraga üks mustand.
+- **`active`:** uued kutsed saavad selle versiooni. Aktiivseid versioone on alati täpselt üks.
+- **`archived`:** endine aktiivne versioon. Juba saadetud lingid, mustandid ja submissionid kasutavad
+  edasi oma versiooni, seega arhiveeritud versiooni ei kustutata ega muudeta.
+
+Voog: `POST …/:id/versions` (mustand) → `PUT …/:id/structure` ja `PUT …/:id/translations` →
+`POST …/:id/activate`. Arhiveeritud versiooni `activate` taastab selle.
+
+`revision` muutub iga struktuuri salvestuse ja aktiveerimisega. `structure` ja `activate` saadavad
+selle versiooni `revision`-i, mille pealt admin muutis. Kui vahepeal salvestas keegi teine, tuleb
+**409** `{ "error": "The form was changed meanwhile, reload it" }` ja midagi ei kirjutata.
+
 ### `GET /api/admin/tenant-forms/templates`
 
-Template'ide list koos iga toetatud keele (`en`, `sv`, `fi`, `no`, `et`) tõlke valmidusega.
+Template'ide list (uusim versioon ees) koos iga toetatud keele (`en`, `sv`, `fi`, `no`, `et`) tõlke
+valmiduse, päritolu ja kasutusega.
 
 ```json
 {
   "data": [
     {
-      "id": "tenant_details_v1",
+      "id": "tenant_details_v2",
       "templateKey": "tenant_details",
-      "version": 1,
-      "status": "active",
+      "version": 2,
+      "status": "draft",
       "baseLanguage": "en",
       "languages": [
-        { "language": "en", "translated": 99, "total": 99 },
-        { "language": "fi", "translated": 98, "total": 99 }
-      ]
+        { "language": "en", "translated": 101, "total": 101 },
+        { "language": "fi", "translated": 99, "total": 101 }
+      ],
+      "basedOnTemplateId": "tenant_details_v1",
+      "createdByEmail": "admin@example.com",
+      "activatedAt": null,
+      "activatedByEmail": null,
+      "revision": 3,
+      "invitationCount": 0,
+      "submissionCount": 0,
+      "createdAt": "2026-10-17 18:20:00",
+      "updatedAt": "2026-10-17 18:42:10"
     }
   ]
 }
 ```
 
-`translated` loeb ainult neid võtmeid, mis on olemas ka baaskeeles.
+`translated` loeb ainult neid võtmeid, mis on olemas ka baaskeeles. `activatedAt` on viimane
+aktiveerimine (ka taastamine).
 
 ### `GET /api/admin/tenant-forms/templates/:id`
 
-Sama mis listi rida, lisaks `sections` (struktuur: väljad, tüübid, required, validatsioon, valikud,
-`itemFields`), `textKeys` (kõik võimalikud tekstivõtmed koos `required` lipuga) ja `texts`
-(`language → text_key → text`, iga toetatud keel olemas, võib olla tühi). **404** tundmatu id korral.
+Sama mis listi rida, lisaks:
+
+- `sections`: struktuur (väljad, tüübid, required, validatsioon, `visibleIf`, valikud, `itemFields`),
+  sama kuju mis `PUT …/structure` body's;
+- `textKeys`: kõik võimalikud tekstivõtmed koos `required` lipuga;
+- `texts`: `language → text_key → text`, iga toetatud keel on olemas, võib olla tühi;
+- `problems`: ainult mustandil, mis veel takistab avaldamist (kuju vt `POST …/activate`), muidu `[]`.
+
+**404** tundmatu id korral.
 
 ### `PUT /api/admin/tenant-forms/templates/:id/translations`
 
 Muudab olemasolevate tekstivõtmete tekste ning lisab või eemaldab tõlkeid. Struktuuri (väljad,
 valikud, required, järjekord) see ei muuda. Kõik muudatused kontrollitakse enne kirjutamist. Kui
-mõni on vigane, ei kirjutata ühtegi. Kehtivad muudatused lähevad ühes D1 batch'is, muutmata tekste
-ei kirjutata.
+mõni on vigane, ei kirjutata ühtegi. Kehtivad muudatused lähevad ühes D1 batch'is (kuni kolm lauset,
+sõltumata muudatuste arvust), muutmata tekste ei kirjutata.
+
+Kui muudetakse aktiivse versiooni tekste ja mustand on olemas, saab samas batch'is sama muudatuse ka
+mustand, aga ainult nende tekstide puhul, mis on mustandis veel samad mis aktiivse senine tekst.
+Mustandis juba muudetud tekst jääb alles. Nii ei kao kirjaveaparandus mustandi avaldamisel.
 
 **Request body (max 1 MB, kuni 500 muudatust):**
 
@@ -1647,6 +1684,114 @@ Koodid:
 - `missing_base_text`.
 
 **Response 404:** tundmatu template. **Response 413:** body on liiga suur.
+
+### `POST /api/admin/tenant-forms/templates/:id/versions`
+
+Teeb versioonist `:id` (aktiivsest või arhiveeritud) mustandi: struktuuri ja kõigi keelte tekstide
+koopia. Uue mustandi id on `<templateKey>_v<version>`, nt `tenant_details_v2`. Body't pole.
+
+**Response 201:** mustandi detail (sama kuju mis `GET …/templates/:id`), `revision: 0`.
+
+**Response 409:** mustand on juba olemas või `:id` ise on mustand. **Response 404:** tundmatu template.
+
+### `PUT /api/admin/tenant-forms/templates/:id/structure`
+
+Asendab mustandi struktuuri. Võimaldab lisada välju ja valikuid, muuta kohustuslikkust ning
+sektsioonide, väljade ja valikute järjekorda. Eemaldatud sektsioonide, väljade ja valikute tekstid
+kustuvad kõigis keeltes.
+
+**Request body (max 200 KB):**
+
+```json
+{
+  "revision": 0,
+  "sections": [
+    {
+      "key": "main_guest",
+      "fields": [
+        { "key": "first_name", "type": "text", "required": true, "validation": { "maxLength": 100 }, "visibleIf": null, "options": [], "itemFields": [] },
+        { "key": "linkedin", "type": "url", "required": false }
+      ]
+    }
+  ],
+  "texts": [{ "language": "en", "textKey": "field.linkedin.label", "text": "LinkedIn profile" }]
+}
+```
+
+- `validation`, `visibleIf`, `options` ja `itemFields` võib ära jätta (vaikimisi `{}`, `null`, `[]`).
+- `texts` on valikuline, reeglid on samad mis `PUT …/translations` puhul ja kontrollitakse uue
+  struktuuri vastu. Tavaliselt on need uute elementide EN tekstid.
+
+**Salvestamist takistavad (400 `Invalid structure`):**
+
+- kuju vale, tundmatu omadus või `required` pole boolean (`invalid_shape`);
+- võti pole kujul `^[a-z][a-z0-9_]{0,39}$` (`invalid_key`), välja võti lõpeb `_other`-iga
+  (`reserved_key`, see on vabateksti väärtuse võti) või võti kordub (`duplicate_key`). Ülataseme
+  väljade võtmed on unikaalsed kogu vormis, `itemFields` võtmed oma välja piires;
+- tundmatu tüüp või `itemFields` tüüp, mida kaaskülalise rida ei toeta (`unsupported_type`). Lubatud
+  tüübid: `text`, `textarea`, `email`, `tel`, `url`, `date`, `number`, `single_choice`, `checkbox`,
+  `info`, `file`, `guest_list`. Ridade väljadel ei saa olla `info`, `file` ega `guest_list`;
+- valikud mujal kui `single_choice`-il, `itemFields` mujal kui `guest_list`-il (`invalid_shape`);
+- tüübile võõras või piiridest väljas reegel (`invalid_validation`). Pikkuse piirid: text ja url 500,
+  textarea 5000, email 254, tel 30;
+- üle 30 sektsiooni, 100 välja (koos ridade väljadega) või 50 valiku (`too_many`).
+
+```json
+{ "error": "Invalid structure", "errors": [{ "path": "sections[2].fields[0].key", "code": "duplicate_key" }] }
+```
+
+`path` viitab saadetud massiivi positsioonile. Vigaste `texts` puhul tuleb 400 `Invalid text changes`
+(kuju nagu `PUT …/translations`).
+
+**Mustand võib olla poolik:** avaldamist takistavad probleemid (nt puuduv EN silt) ei takista
+salvestamist. Need on vastuse `problems` väljal.
+
+**Response 200:** uuendatud detail, `revision` + 1. **Response 409:** ei ole mustand või `revision` on
+vana. **Response 400:** `revision` puudub. **Response 404:** tundmatu template.
+
+### `POST /api/admin/tenant-forms/templates/:id/activate`
+
+Teeb mustandi või arhiveeritud versiooni aktiivseks. Senine aktiivne versioon arhiveeritakse. Uued
+kutsed saavad selle versiooni, juba saadetud lingid jäävad oma versioonile.
+
+**Request body:** `{ "revision": 3 }`
+
+Enne aktiveerimist kontrollitakse kõike, ka arhiveeritud versiooni taastamisel:
+
+- `system_field`: kood loeb neid välju võtme järgi (`src/utils/tenantFormSystemFields.ts`), neid ei
+  tohi eemaldada, tüüpi muuta ega kohustuslikku valikuliseks teha. `sex` ja `document_type` valikud
+  on lubatud nimekirjast;
+- `type_changed`: välja tüüp erineb versioonist, millest mustand tehti (sama võtme puhul);
+- `new_field_not_allowed`: uus `file` või `guest_list` väli;
+- `locked_validation`: failivälja limiidid (`maxFiles`, `maxFileBytes`, `accept`) või kuupäevade
+  minimaalse peatumise reegel erinevad lähteversioonist;
+- `file_required_mismatch`: valikulisel failiväljal on `minFiles` > 0;
+- `too_few_options`: `single_choice` väljal on alla 2 valiku;
+- `invalid_visible_if`: tingimus ei viita varasemale `single_choice` väljale ja selle valikule (või on
+  kaaskülalise rea väljal);
+- `empty_section`;
+- `missing_text`: kohustuslik EN tekst puudub (`detail` on tekstivõti);
+- `orphan_text`: tekst võtmele, mida struktuuris pole (`detail` on `language:textKey`).
+
+```json
+{
+  "error": "Template has problems",
+  "problems": [
+    { "path": "", "code": "system_field", "detail": "phone: missing" },
+    { "path": "sections[1].fields[7]", "code": "missing_text", "detail": "field.linkedin.label" }
+  ]
+}
+```
+
+**Response 200:** aktiveeritud versiooni detail, `revision` + 1. **Response 409:** juba aktiivne või
+`revision` on vana. **Response 404:** tundmatu template.
+
+### `DELETE /api/admin/tenant-forms/templates/:id`
+
+Kustutab mustandi koos struktuuri ja tekstidega. Aktiivset ja arhiveeritud versiooni ei kustutata
+(**409**), sest kutsed ja submissionid viitavad neile.
+
+**Response 200:** `{ "id": "tenant_details_v2", "deleted": true }`. **Response 404:** tundmatu template.
 
 ---
 
@@ -1989,9 +2134,13 @@ konverteeritud), nii et kahest samaaegsest konversioonist läheb läbi ainult ü
 | `DELETE` | `/api/tenant-forms/files/:fileId`                 | tenant | Eemalda saatmata fail                          |
 | `PUT`    | `/api/tenant-forms/draft`                         | tenant | Salvesta pooleli vorm                          |
 | `POST`   | `/api/tenant-forms/submit`                        | tenant | Saada vorm                                     |
-| `GET`    | `/api/admin/tenant-forms/templates`               | admin  | Template'id + tõlke valmidus                   |
-| `GET`    | `/api/admin/tenant-forms/templates/:id`           | admin  | Template'i struktuur ja kõik tekstid           |
+| `GET`    | `/api/admin/tenant-forms/templates`               | admin  | Template'i versioonid + tõlke valmidus + kasutus |
+| `GET`    | `/api/admin/tenant-forms/templates/:id`           | admin  | Template'i struktuur, tekstid, mustandi probleemid |
 | `PUT`    | `/api/admin/tenant-forms/templates/:id/translations` | admin | Muuda tekste ja tõlkeid (kõik või mitte midagi) |
+| `POST`   | `/api/admin/tenant-forms/templates/:id/versions`  | admin  | Tee versioonist mustand                        |
+| `PUT`    | `/api/admin/tenant-forms/templates/:id/structure` | admin  | Salvesta mustandi struktuur                    |
+| `POST`   | `/api/admin/tenant-forms/templates/:id/activate`  | admin  | Avalda mustand või taasta arhiveeritud versioon |
+| `DELETE` | `/api/admin/tenant-forms/templates/:id`           | admin  | Kustuta mustand                                |
 | `GET`    | `/api/admin/tenant-forms/invitations`             | admin  | Invitationite list (filter: `?status=`, `?submissionStatus=`, `?converted=`, `?offerId=`) |
 | `POST`   | `/api/admin/tenant-forms/invitations`             | admin  | Loo invitation (vastuses link)                 |
 | `GET`    | `/api/admin/tenant-forms/invitations/:id`         | admin  | Invitation + sündmuste ajajoon                 |

@@ -8,11 +8,12 @@ export const BASE_LANGUAGE: FormLanguage = 'en';
 export const TEXT_VARIABLES = ['offerTitle', 'displayName', 'maxFileSizeMb', 'maxFiles'] as const;
 export type TextVariable = (typeof TEXT_VARIABLES)[number];
 
-const FIELD_TYPES = [
+export const FIELD_TYPES = [
 	'text',
 	'textarea',
 	'email',
 	'tel',
+	'url',
 	'date',
 	'number',
 	'single_choice',
@@ -261,6 +262,7 @@ export type FieldErrorCode =
 	| 'too_long'
 	| 'invalid_email'
 	| 'invalid_phone'
+	| 'invalid_url'
 	| 'invalid_date'
 	| 'date_in_future'
 	| 'date_order'
@@ -288,7 +290,7 @@ export type FormValidationResult = { ok: true; values: FormValues } | { ok: fals
  */
 export type ValidationMode = 'submit' | 'draft';
 
-const DEFAULT_MAX_LENGTH: Partial<Record<FieldType, number>> = { text: 500, textarea: 5000, email: 254, tel: 30 };
+export const DEFAULT_MAX_LENGTH: Partial<Record<FieldType, number>> = { text: 500, textarea: 5000, email: 254, tel: 30, url: 500 };
 const FREE_TEXT_MAX_LENGTH = 300;
 const DEFAULT_MAX_ITEMS = 20;
 const DEFAULT_MAX_FILES = 10;
@@ -416,6 +418,7 @@ function checkValue(field: FormField, raw: unknown, run: ValidationRun): CheckRe
 		case 'textarea':
 		case 'email':
 		case 'tel':
+		case 'url':
 		case 'date':
 			return checkString(field, raw, run);
 		case 'number':
@@ -443,6 +446,7 @@ function checkString(field: FormField, raw: unknown, run: ValidationRun): CheckR
 	if (field.validation.minLength !== undefined && value.length < field.validation.minLength) return { error: 'too_short' };
 	if (field.type === 'email' && !EMAIL_PATTERN.test(value)) return { error: 'invalid_email' };
 	if (field.type === 'tel' && !isPhoneNumber(value)) return { error: 'invalid_phone' };
+	if (field.type === 'url' && !isHttpsUrl(value)) return { error: 'invalid_url' };
 	if (field.type === 'date') {
 		if (!isIsoDate(value)) return { error: 'invalid_date' };
 		if (field.validation.notInFuture && value > run.today) return { error: 'date_in_future' };
@@ -452,6 +456,15 @@ function checkString(field: FormField, raw: unknown, run: ValidationRun): CheckR
 
 function isPhoneNumber(value: string): boolean {
 	return PHONE_PATTERN.test(value) && value.replace(/\D/g, '').length >= MIN_PHONE_DIGITS;
+}
+
+function isHttpsUrl(value: string): boolean {
+	if (!value.startsWith('https://') || /\s/.test(value)) return false;
+	try {
+		return new URL(value).hostname.includes('.');
+	} catch {
+		return false;
+	}
 }
 
 function checkNumber(field: FormField, raw: unknown): CheckResult {

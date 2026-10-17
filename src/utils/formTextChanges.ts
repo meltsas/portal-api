@@ -131,6 +131,51 @@ function applyChange(change: unknown, index: number, run: ChangeRun): ChangeErro
 	return null;
 }
 
+/**
+ * Text edits of the active version that also apply to its draft: a draft text that still equals the
+ * active text before the edit follows it, one the admin already changed in the draft stays as it is.
+ * Keys the draft no longer has are skipped, and a draft translation is only added under an English text.
+ */
+export function propagateTextOperations(
+	operations: TextOperation[],
+	activeTexts: StoredTexts,
+	draftTexts: StoredTexts,
+	draftKeySpecs: TextKeySpec[]
+): TextOperation[] {
+	const specs = new Map(draftKeySpecs.map((spec) => [spec.key, spec]));
+	const draftBaseKeys = new Set(Object.keys(draftTexts[BASE_LANGUAGE] ?? {}));
+	const unchangedInDraft = (language: FormLanguage, textKey: string) =>
+		draftTexts[language]?.[textKey] === activeTexts[language]?.[textKey];
+	const isBaseOperation = (operation: TextOperation) =>
+		operation.kind === 'delete_all_languages' || operation.language === BASE_LANGUAGE;
+
+	const propagated: TextOperation[] = [];
+	// English first, so a translation sees the English text it needs.
+	for (const operation of [...operations.filter(isBaseOperation), ...operations.filter((op) => !isBaseOperation(op))]) {
+		const spec = specs.get(operation.textKey);
+		if (!spec) continue;
+
+		if (operation.kind === 'delete_all_languages') {
+			if (!spec.required && draftBaseKeys.has(operation.textKey) && unchangedInDraft(BASE_LANGUAGE, operation.textKey)) {
+				draftBaseKeys.delete(operation.textKey);
+				propagated.push(operation);
+			}
+			continue;
+		}
+		if (!unchangedInDraft(operation.language, operation.textKey)) continue;
+
+		if (operation.kind === 'delete') {
+			propagated.push(operation);
+		} else if (operation.language === BASE_LANGUAGE) {
+			draftBaseKeys.add(operation.textKey);
+			propagated.push(operation);
+		} else if (draftBaseKeys.has(operation.textKey)) {
+			propagated.push(operation);
+		}
+	}
+	return propagated;
+}
+
 function hasNonHttpsLink(text: string): boolean {
 	for (const match of text.matchAll(LINK_PATTERN)) {
 		if (!match[1].trim().startsWith('https://')) return true;

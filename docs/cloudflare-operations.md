@@ -1035,3 +1035,40 @@ Logi otsimine: dashboard → Workers & Pages → `portal-api` → Observability,
 (nt lubatud saatja), salvestatakse ajutisse faili ja logitakse terminali („send_email binding called
 with MessageBuilder“). Et lokaalse kirja link viiks lokaalsesse admin UI-sse, lisa `.dev.vars`-i
 `ADMIN_UI_URL=http://localhost:5173` (vt `.dev.vars.example`).
+
+---
+
+## 25. Tenant formi versioonid (struktuuri muutmine)
+
+Admin muudab vormi struktuuri mustandis ja avaldab selle. Endpointid on kirjas failis
+`docs/api-endpoints.md` §14 („Template'i versioonid“), plaan on roadmap'i faasis 12.
+
+### Toodangusse viimine
+
+Migratsioon `0013_tenant_form_template_versions.sql` lisab `form_templates`-ile veerud
+`based_on_template_id`, `created_by_email`, `activated_at`, `activated_by_email` ja `revision`.
+Worker loeb neid veerge template'i endpointides, seega **migratsioon enne Workeri deploy'd**:
+
+```bash
+npx wrangler d1 migrations list portal-db --remote
+```
+
+```bash
+npx wrangler d1 migrations apply portal-db --remote
+```
+
+Avalik vorm ja kutse loomine neid veerge ei loe, nii et vahepealne aeg neid ei mõjuta.
+
+### Kui avaldatud versioonis on viga
+
+Admin UI-s „Restore“ eelmisel versioonil (`POST …/templates/<vana id>/activate`). Taastamine ei muuda
+kutseid, mis vahepeal uue versiooniga loodi. Need jäävad uue versiooni peale, vajadusel tühista ja tee
+uus kutse.
+
+### D1 lausete arv
+
+Versiooni koopia (umbes 580 rida) on viis `INSERT … SELECT` lauset. Mustandi salvestus on umbes kümme
+lauset, sest read lähevad ühe JSON parameetrina (`json_each`). Tekstide PUT kirjutab kuni kolm lauset
+sõltumata muudatuste arvust. Põhjus: D1 Free plaanil on 50 päringut Workeri kutse kohta ja
+dokumentatsioon ei ütle, kas batch'i iga lause loeb eraldi (kontrollitud 2026-10-17,
+[D1 limits](https://developers.cloudflare.com/d1/platform/limits/)).
