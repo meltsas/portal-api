@@ -36,6 +36,12 @@ import {
 	handleAdminUpdateTenantFormTranslations,
 } from '../handlers/admin/tenantFormTemplates';
 import {
+	handleAdminActivateTenantFormTemplate,
+	handleAdminCreateTenantFormVersion,
+	handleAdminDeleteTenantFormTemplate,
+	handleAdminSaveTenantFormStructure,
+} from '../handlers/admin/tenantFormTemplateVersions';
+import {
 	handleAdminCreateTenantFormInvitation,
 	handleAdminGetTenantFormInvitation,
 	handleAdminGetTenantFormInvitationLink,
@@ -89,7 +95,11 @@ export const adminRoutes: Route[] = [
 
 	get('/api/admin/tenant-forms/templates', handleAdminGetTenantFormTemplates, guards),
 	get('/api/admin/tenant-forms/templates/:id', handleAdminGetTenantFormTemplate, guards),
+	del('/api/admin/tenant-forms/templates/:id', handleAdminDeleteTenantFormTemplate, guards),
 	put('/api/admin/tenant-forms/templates/:id/translations', handleAdminUpdateTenantFormTranslations, guards),
+	post('/api/admin/tenant-forms/templates/:id/versions', handleAdminCreateTenantFormVersion, guards),
+	put('/api/admin/tenant-forms/templates/:id/structure', handleAdminSaveTenantFormStructure, guards),
+	post('/api/admin/tenant-forms/templates/:id/activate', handleAdminActivateTenantFormTemplate, guards),
 	get('/api/admin/tenant-forms/invitations', handleAdminGetTenantFormInvitations, guards),
 	post('/api/admin/tenant-forms/invitations', handleAdminCreateTenantFormInvitation, guards),
 	get('/api/admin/tenant-forms/invitations/:id', handleAdminGetTenantFormInvitation, guards),

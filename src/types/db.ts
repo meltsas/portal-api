@@ -145,6 +145,11 @@ export interface FormTemplateRow {
 	version: number;
 	base_language: string;
 	status: string;
+	based_on_template_id: string | null;
+	created_by_email: string | null;
+	activated_at: string | null;
+	activated_by_email: string | null;
+	revision: number;
 	created_at: string;
 	updated_at: string;
 }
